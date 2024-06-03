@@ -1,0 +1,10 @@
+#...
+@PACKAGE_INIT@
+#...
+
+include(CMakeFindDependencyMacro)
+include("${CMAKE_CURRENT_LIST_DIR}/quottery_cppTargets.cmake")
+
+set(quottery_cpp_INCLUDE_DIR ${PACKAGE_PREFIX_DIR}/include)
+set_and_check(quottery_cpp_LIBRARY ${PACKAGE_PREFIX_DIR}/lib/libquottery_cpp.so)
+
