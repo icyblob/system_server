@@ -30,7 +30,9 @@ def init_db():
             no_ops INTEGER,
             oracle_id TEXT,
             oracle_fee TEXT,
-            status INTEGER
+            status INTEGER,
+            current_num_selection TEXT,
+            current_total_qus TEXT
         )
     ''')
     cursor.execute('''
@@ -140,9 +142,87 @@ def get_active_bets():
             'oracle_id': bet[12],
             'oracle_fee': bet[13],
             'status': bet[14],
+            'current_num_selection': bet[15],
+            'current_total_qus': bet[16]
         })
 
     return jsonify(bets_list)
+
+
+import sqlite3
+
+
+def create_trigger(conn):
+    cursor = conn.cursor()
+    cursor.execute('''
+        -- Create trigger to update current_num_selection and current_total_qus
+        CREATE TRIGGER IF NOT EXISTS after_insert_user_bet_info
+        AFTER INSERT ON user_bet_info
+        FOR EACH ROW
+        BEGIN
+            -- Update current_total_qus
+            UPDATE quottery_info
+            SET current_total_qus = (
+                SELECT COALESCE(SUM(num_slots * amount_per_slot), 0)
+                FROM user_bet_info
+                WHERE bet_id = NEW.bet_id
+            )
+            WHERE bet_id = NEW.bet_id;
+        
+            -- Update current_num_selection
+            UPDATE quottery_info
+            SET current_num_selection = (
+                WITH RECURSIVE generate_options(option_id) AS (
+                    SELECT 0 AS option_id
+                    UNION ALL
+                    SELECT option_id + 1
+                    FROM generate_options
+                    WHERE option_id + 1 < (SELECT no_options FROM quottery_info WHERE bet_id = NEW.bet_id)
+                ),
+                option_counts AS (
+                    SELECT 
+                        option_id, 
+                        SUM(num_slots) AS num_slots
+                    FROM 
+                        user_bet_info
+                    WHERE bet_id = NEW.bet_id
+                    GROUP BY 
+                        option_id
+                ),
+                filled_options AS (
+                    SELECT 
+                        generate_options.option_id,
+                        COALESCE(option_counts.num_slots, 0) AS num_slots
+                    FROM 
+                        generate_options
+                    LEFT JOIN 
+                        option_counts
+                    ON 
+                        generate_options.option_id = option_counts.option_id
+                )
+                SELECT 
+                    GROUP_CONCAT(num_slots, ',')
+                FROM 
+                    filled_options
+            )
+            WHERE bet_id = NEW.bet_id;
+        END;
+    ''')
+    conn.commit()
+
+
+def insert_user_bet_info(conn, data, user_id):
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO user_bet_info (bet_id, user_id, option_id, num_slots, amount_per_slot)
+            VALUES (?, ?, ?, ?, ?) ''', (
+        data['bet_id'],
+        user_id,
+        data['option_id'],
+        data['num_slots'],
+        data['amount_per_slot']
+    ))
+    conn.commit()
 
 
 @app.route('/join_bet', methods=['POST'])
@@ -159,19 +239,15 @@ def join_bet():
     # if cpp_response.status_code != 201:
     #     return jsonify({"error": "C++ server failed to create bet", "message": cpp_response.text}), 500
 
-    conn = sqlite3.connect('database.db')
-    cursor = conn.cursor()
+    # [TODO]: GET USER ID FROM cpp_response. Create dummy USER ID for now
+    import random
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    user_id = ''.join(random.choice(letters) for i in range(32))
 
-    cursor.execute('''
-        INSERT INTO user_bet_info (bet_id, user_id, option_id, num_slots, amount_per_slot)
-            VALUES (?, ?, ?, ?, ?) ''', (
-        data['bet_id'],
-        data['user_id'],
-        data['option_id'],
-        data['num_slots'],
-        data['amount_per_slot']
-        ))
-    conn.commit()
+    conn = sqlite3.connect('database.db')
+    create_trigger(conn)
+
+    insert_user_bet_info(conn, data, user_id)
     conn.close()
 
     return jsonify({"message": "Bet joined successfully!"}), 201
@@ -190,6 +266,10 @@ def add_bet():
     #
     # if cpp_response.status_code != 201:
     #     return jsonify({"error": "C++ server failed to create bet", "message": cpp_response.text}), 500
+    # [TODO]: GET CREATOR ID AND BET ID FROM cpp_response. Create dummy creator for now
+    import random
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    creator = ''.join(random.choice(letters) for i in range(32))
 
     # Fetch active bets from C++ server to update the database
     # bets = fetch_active_bets_from_cpp_server()
@@ -199,13 +279,17 @@ def add_bet():
     cursor = conn.cursor()
     cursor.execute('SELECT bet_id FROM quottery_info ORDER BY bet_id DESC LIMIT 1;')
     latest_bet_id = cursor.fetchall()[0][0]
-    print(latest_bet_id)
+
+    current_num_selection = ','.join(['0' for i in range(data['no_options'])])
+
     cursor.execute('''
-                INSERT INTO quottery_info (bet_id, no_options, creator, bet_desc, option_desc, max_slot_per_option, amount_per_bet_slot, open_date, close_date, end_date, result, no_ops, oracle_id, oracle_fee, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ''', (
+                INSERT INTO quottery_info (bet_id, no_options, creator, bet_desc, option_desc, max_slot_per_option,
+                 amount_per_bet_slot, open_date, close_date, end_date, result, no_ops, oracle_id, oracle_fee, status,
+                  current_num_selection, current_total_qus)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ''', (
         latest_bet_id + 1,
         data['no_options'],
-        data['creator'],
+        creator,
         data['bet_desc'],
         ','.join(data['option_desc']),
         data['max_slot_per_option'],
@@ -217,7 +301,9 @@ def add_bet():
         data['no_ops'],
         ','.join(data['oracle_id']),
         ','.join(data['oracle_fee']),
-        data['status'],))
+        data['status'],
+        current_num_selection,
+        '0'))
     conn.commit()
     conn.close()
     ##### [End of Remove later]
@@ -233,7 +319,6 @@ def add_bet():
     new_bet_id = None
     for bet in db_latest_bet:
         if bet[3] == data['bet_desc'] and \
-                bet[2] == data['creator'] and \
                 bet[1] == data['no_options']:
             new_bet_id = bet[0]
             break
