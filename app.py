@@ -32,7 +32,8 @@ def init_db():
             oracle_fee TEXT,
             status INTEGER,
             current_num_selection TEXT,
-            current_total_qus TEXT
+            current_total_qus TEXT,
+            betting_odds TEXT
         )
     ''')
     cursor.execute('''
@@ -143,7 +144,8 @@ def get_active_bets():
             'oracle_fee': bet[13],
             'status': bet[14],
             'current_num_selection': bet[15],
-            'current_total_qus': bet[16]
+            'current_total_qus': bet[16],
+            'betting_odds': bet[17],
         })
 
     return jsonify(bets_list)
@@ -285,8 +287,8 @@ def add_bet():
     cursor.execute('''
                 INSERT INTO quottery_info (bet_id, no_options, creator, bet_desc, option_desc, max_slot_per_option,
                  amount_per_bet_slot, open_date, close_date, end_date, result, no_ops, oracle_id, oracle_fee, status,
-                  current_num_selection, current_total_qus)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ''', (
+                  current_num_selection, current_total_qus, betting_odds)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ''', (
         latest_bet_id + 1,
         data['no_options'],
         creator,
@@ -303,7 +305,8 @@ def add_bet():
         ','.join(data['oracle_fee']),
         data['status'],
         current_num_selection,
-        '0'))
+        '0',
+        ','.join(data['betting_odds'])))
     conn.commit()
     conn.close()
     ##### [End of Remove later]
