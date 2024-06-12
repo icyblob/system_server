@@ -43,7 +43,6 @@ def init_db():
             user_id TEXT NOT NULL ,
             option_id INTEGER NOT NULL,
             num_slots INTEGER NOT NULL,
-            amount_per_slot REAL NOT NULL,
             FOREIGN KEY (bet_id) REFERENCES quottery_info(bet_id)
         )
     ''')
@@ -227,6 +226,32 @@ def insert_user_bet_info(conn, data, user_id):
     conn.commit()
 
 
+def update_betting_odds(conn, bet_id):
+    # Retrieve current_num_selection for the given bet_id
+    cur = conn.cursor()
+    cur.execute("SELECT current_num_selection FROM quottery_info WHERE bet_id = ?", (bet_id,))
+    row = cur.fetchone()
+
+    if row:
+        current_num_selection = list(map(int, row[0].split(',')))
+        total_selections = sum(current_num_selection)
+
+        # Calculate betting odds
+        if total_selections == 0:
+            betting_odds = [1] * len(current_num_selection)
+        else:
+            betting_odds = [total_selections / selection if selection > 0 else total_selections for selection in current_num_selection]
+
+        betting_odds_str = ','.join(map(str, betting_odds))
+
+        # Update the betting_odds in the database
+        cur.execute("UPDATE quottery_info SET betting_odds = ? WHERE bet_id = ?", (betting_odds_str, bet_id))
+        conn.commit()
+        print(f"Betting odds updated for bet_id {bet_id}")
+    else:
+        print(f"No entry found for bet_id {bet_id}")
+
+
 @app.route('/join_bet', methods=['POST'])
 def join_bet():
     data = request.json
@@ -248,8 +273,8 @@ def join_bet():
 
     conn = sqlite3.connect('database.db')
     create_trigger(conn)
-
     insert_user_bet_info(conn, data, user_id)
+    update_betting_odds(conn, data['bet_id'])
     conn.close()
 
     return jsonify({"message": "Bet joined successfully!"}), 201
@@ -306,7 +331,8 @@ def add_bet():
         data['status'],
         current_num_selection,
         '0',
-        ','.join(data['betting_odds'])))
+        ','.join(['1' for i in range(data['no_options'])])
+    ))
     conn.commit()
     conn.close()
     ##### [End of Remove later]
