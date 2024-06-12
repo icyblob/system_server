@@ -1,18 +1,24 @@
 import os
 import sqlite3
-import requests
+import json
+import quottery_cpp_wrapper
 from flask_cors import CORS
 from flask import Flask, request, jsonify
-from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 CORS(app)
 
-CPP_SERVER_URL = 'http://192.168.1.212:6000'
+# IP to a active node
+NODE_IP = '192.168.1.10'
+NODE_PORT = 12345
 
+QUOTTERY_LIBS = 'libs/quottery_cpp/lib/libquottery_cpp.so'
+qt = quottery_cpp_wrapper.QuotteryCppWrapper(QUOTTERY_LIBS, NODE_IP, NODE_PORT)
+
+DATABASE_FILE = 'database.db'
 
 def init_db():
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DATABASE_FILE)
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS quottery_info (
@@ -21,6 +27,7 @@ def init_db():
             creator TEXT NOT NULL,
             bet_desc TEXT NOT NULL,
             option_desc TEXT NOT NULL,
+            current_bet_state TEXT NOT NULL,
             max_slot_per_option INTEGER NOT NULL,
             amount_per_bet_slot REAL NOT NULL,
             open_date TEXT,
@@ -36,6 +43,7 @@ def init_db():
             betting_odds TEXT
         )
     ''')
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_bet_info (
             user_bet_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,30 +58,58 @@ def init_db():
     conn.close()
 
 
-def fetch_active_bets_from_cpp_server():
-    try:
-        cpp_response = requests.get(os.path.join(CPP_SERVER_URL, 'get_active_bets'))
-        cpp_response.raise_for_status()
-        return cpp_response.json()
-    except requests.exceptions.RequestException as e:
-        print(f"Failed to communicate with C++ server: {e}")
-        return []
+def fetch_active_bets_from_node():
+    # Connect to the node and get current active bets
+    # TODO: Process the disconnected issue
+    active_bets = qt.get_active_bets()
+    return active_bets
 
 
-def update_database_with_active_bets(active_bets):
-    conn = sqlite3.connect('database.db')
+def submit_join_bet(betInfo):
+    tx_hash, tx_tick = qt.join_bet(betInfo)
+    return (tx_hash, tx_tick)
+
+
+def submit_add_bet(betInfo):
+    tx_hash, tx_tick = qt.add_bet(betInfo)
+    return (tx_hash, tx_tick)
+
+
+def check_primary_key_exists(cursor, table_name, primary_key_column, primary_key_value):
+    """
+    Check if a primary key exists in the table.
+
+    :param cursor: SQLite cursor object.
+    :param table_name: Name of the table.
+    :param primary_key_column: Name of the primary key column.
+    :param primary_key_value: Value of the primary key to check.
+    :return: True if the primary key exists, False otherwise.
+    """
+    query = f"SELECT 1 FROM {table_name} WHERE {primary_key_column} = ?"
+    cursor.execute(query, (primary_key_value,))
+    return cursor.fetchone() is not None
+
+
+def update_database_with_active_bets():
+
+    # Fetch active bets from the nodes
+    active_bets = fetch_active_bets_from_node()
+
+    # Verify the active_bets
+    if len(active_bets) == 0:
+        print('[WARNING] Active bets from node is empty! Display the local database')
+
+    # Connect to the database
+    conn = sqlite3.connect(DATABASE_FILE)
     cursor = conn.cursor()
 
-    # Fetch current active bets in the database
-    cursor.execute('SELECT bet_id FROM quottery_info')
-    current_bet_ids = {row[0] for row in cursor.fetchall()}
-
-    # Add new bets and update existing ones
-    new_bet_ids = set()
-    for active_bet in active_bets:
-        new_bet_ids.add(active_bet['bet_id'])
-
-        if active_bet['bet_id'] not in current_bet_ids:
+    # Update the database
+    # TODO: Verify the existed one ? Or just update the newest one that is verified from node
+    new_bet_ids = []
+    for key, active_bet in active_bets.items():
+        if check_primary_key_exists(cursor=cursor, table_name='quottery_info',
+                                 primary_key_column='bet_id',
+                                 primary_key_value=active_bet['bet_id']) is False:
             cursor.execute('''
                 INSERT INTO quottery_info (bet_id, no_options, creator, bet_desc, option_desc, max_slot_per_option, amount_per_bet_slot, open_date, close_date, end_date, result, no_ops, oracle_id, oracle_fee, status)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ''', (
@@ -81,7 +117,8 @@ def update_database_with_active_bets(active_bets):
                 active_bet['no_options'],
                 active_bet['creator'],
                 active_bet['bet_desc'],
-                active_bet['option_desc'],
+                json.dumps(active_bet['option_desc']),  # This should be a separate table
+                json.dumps(active_bet['current_bet_state']), # This should be a separate table
                 active_bet['max_slot_per_option'],
                 active_bet['amount_per_bet_slot'],
                 active_bet['open_date'],
@@ -89,15 +126,19 @@ def update_database_with_active_bets(active_bets):
                 active_bet['end_date'],
                 active_bet['result'],
                 active_bet['no_ops'],
-                active_bet['oracle_id'],
-                active_bet['oracle_fee'],
-                active_bet['status'],))
+                json.dumps(active_bet['oracle_id']), # This should be a separate table
+                json.dumps(active_bet['oracle_fee']), # This should be a separate table
+                active_bet['status'],
+                json.dumps(['0'] * active_bet['no_options']),
+                '0',
+                json.dumps(['1'] * active_bet['no_options']),
+            ))
+            new_bet_ids.append(key)
 
-    # Remove bets that are no longer active
-    active_bet_ids = {bet['bet_id'] for bet in active_bets}
-    bets_to_inactive = active_bet_ids - (current_bet_ids.union(new_bet_ids))
-    for bet_id in bets_to_inactive:
-        cursor.execute('UPDATE quottery_info SET status = 0 WHERE bet_id = ?', (bet_id,))
+    # Mark the old bet status as 0
+    update_statement = 'UPDATE quottery_info SET status = 0 WHERE bet_id NOT IN ({});'.format(
+        ','.join('?' for _ in new_bet_ids))
+    cursor.execute(update_statement, new_bet_ids)
 
     conn.commit()
     conn.close()
@@ -105,52 +146,22 @@ def update_database_with_active_bets(active_bets):
 
 @app.route('/get_active_bets', methods=['GET'])
 def get_active_bets():
-    # Assuming this is the part to load from the C++ server, comment for now
-    # [TODO]:
-    #  1. Load from C++ server
-    #  2. Update the database
-    #  3. Load from the database
+    # Fetch data and update the SQLite database with the newest active bets
+    update_database_with_active_bets()
 
-    # Fetch active bets from the C++ server
-    # active_bets = fetch_active_bets_from_cpp_server()
-
-    # Update the SQLite database with the newest active bets
-    # update_database_with_active_bets(active_bets)
-
-    # Load the updated bet list from the SQLite database
-    conn = sqlite3.connect('database.db')
+    # Load the updated bet list from the updated SQLite database
+    conn = sqlite3.connect(DATABASE_FILE)
+    conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM quottery_info')
-    bets = cursor.fetchall()
+    rows = cursor.fetchall()
     conn.close()
 
-    bets_list = []
-    for bet in bets:
-        bets_list.append({
-            'bet_id': bet[0],
-            'no_options': bet[1],
-            'creator': bet[2],
-            'bet_desc': bet[3],
-            'option_desc': bet[4],
-            'max_slot_per_option': bet[5],
-            'amount_per_bet_slot': bet[6],
-            'open_date': bet[7],
-            'close_date': bet[8],
-            'end_date': bet[9],
-            'result': bet[10],
-            'no_ops': bet[11],
-            'oracle_id': bet[12],
-            'oracle_fee': bet[13],
-            'status': bet[14],
-            'current_num_selection': bet[15],
-            'current_total_qus': bet[16],
-            'betting_odds': bet[17],
-        })
+    # Convert rows to a list of dictionaries
+    bets_list = [dict(row) for row in rows]
 
+    # Reply with json
     return jsonify(bets_list)
-
-
-import sqlite3
 
 
 def create_trigger(conn):
@@ -212,13 +223,13 @@ def create_trigger(conn):
     conn.commit()
 
 
-def insert_user_bet_info(conn, data, user_id):
+def insert_user_bet_info(conn, data):
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO user_bet_info (bet_id, user_id, option_id, num_slots, amount_per_slot)
             VALUES (?, ?, ?, ?, ?) ''', (
         data['bet_id'],
-        user_id,
+        data['user_id'],
         data['option_id'],
         data['num_slots'],
         data['amount_per_slot']
@@ -246,7 +257,6 @@ def update_betting_odds(conn, bet_id):
 
         # Update the betting_odds in the database
         cur.execute("UPDATE quottery_info SET betting_odds = ? WHERE bet_id = ?", (betting_odds_str, bet_id))
-        conn.commit()
         print(f"Betting odds updated for bet_id {bet_id}")
     else:
         print(f"No entry found for bet_id {bet_id}")
@@ -254,108 +264,49 @@ def update_betting_odds(conn, bet_id):
 
 @app.route('/join_bet', methods=['POST'])
 def join_bet():
+
+    # Get data from request
     data = request.json
 
-    # Send JSON to C++ server
-    # try:
-    #     cpp_response = requests.post(os.path.join(CPP_SERVER_URL, 'join_bet'), json=data)
-    #     cpp_response.raise_for_status()
-    # except requests.exceptions.RequestException as e:
-    #     return jsonify({"error": "Failed to communicate with C++ server", "message": str(e)}), 500
-    #
-    # if cpp_response.status_code != 201:
-    #     return jsonify({"error": "C++ server failed to create bet", "message": cpp_response.text}), 500
+    # Request join bet to the node
+    tx_hash, tx_tick = submit_join_bet(data)
 
-    # [TODO]: GET USER ID FROM cpp_response. Create dummy USER ID for now
-    import random
-    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    user_id = ''.join(random.choice(letters) for i in range(32))
+    # Join bet will need to wait for a few sticks to make sure it appears
+    # So we can not check here. May be notify wait for some sticks ?
 
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DATABASE_FILE)
     create_trigger(conn)
-    insert_user_bet_info(conn, data, user_id)
+    insert_user_bet_info(conn, data)
     update_betting_odds(conn, data['bet_id'])
+    conn.commit()
     conn.close()
 
-    return jsonify({"message": "Bet joined successfully!"}), 201
-
+    if tx_tick > 0:
+        message = 'Bet joined successfully.'
+        message = message + 'TxTick: ' + str(tx_tick)
+        message = message + ', TxHash: ' + tx_hash
+        return jsonify({"message": message}), 201
+    else:
+        return jsonify({"error": "Failed to submit the bet"}), 500
 
 @app.route('/add_bet', methods=['POST'])
 def add_bet():
+
+    # Get the request
     data = request.json
 
-    # Send JSON to C++ server
-    # try:
-    #     cpp_response = requests.post(os.path.join(CPP_SERVER_URL, 'add_bet'), json=data)
-    #     cpp_response.raise_for_status()
-    # except requests.exceptions.RequestException as e:
-    #     return jsonify({"error": "Failed to communicate with C++ server", "message": str(e)}), 500
-    #
-    # if cpp_response.status_code != 201:
-    #     return jsonify({"error": "C++ server failed to create bet", "message": cpp_response.text}), 500
-    # [TODO]: GET CREATOR ID AND BET ID FROM cpp_response. Create dummy creator for now
-    import random
-    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    creator = ''.join(random.choice(letters) for i in range(32))
+    # Submit adding bet to node
+    tx_hash, tx_tick = submit_add_bet(data)
 
-    # Fetch active bets from C++ server to update the database
-    # bets = fetch_active_bets_from_cpp_server()
-    # update_database_with_active_bets(bets)
-    ##### [Remove later] The above is replaced by the update directly to the database, skipping C++ server fetching for now
-    conn = sqlite3.connect('database.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT bet_id FROM quottery_info ORDER BY bet_id DESC LIMIT 1;')
-    latest_bet_id = cursor.fetchall()[0][0]
-
-    current_num_selection = ','.join(['0' for i in range(data['no_options'])])
-
-    cursor.execute('''
-                INSERT INTO quottery_info (bet_id, no_options, creator, bet_desc, option_desc, max_slot_per_option,
-                 amount_per_bet_slot, open_date, close_date, end_date, result, no_ops, oracle_id, oracle_fee, status,
-                  current_num_selection, current_total_qus, betting_odds)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ''', (
-        latest_bet_id + 1,
-        data['no_options'],
-        creator,
-        data['bet_desc'],
-        ','.join(data['option_desc']),
-        data['max_slot_per_option'],
-        data['amount_per_bet_slot'],
-        data['open_date'],
-        data['close_date'],
-        data['end_date'],
-        data['result'],
-        data['no_ops'],
-        ','.join(data['oracle_id']),
-        ','.join(data['oracle_fee']),
-        data['status'],
-        current_num_selection,
-        '0',
-        ','.join(['1' for i in range(data['no_options'])])
-    ))
-    conn.commit()
-    conn.close()
-    ##### [End of Remove later]
-
-    # Load the updated bet list from the SQLite database
-    conn = sqlite3.connect('database.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM quottery_info ORDER BY bet_id DESC LIMIT 1;')
-    db_latest_bet = cursor.fetchall()
-    conn.close()
-
-    # Double check
-    new_bet_id = None
-    for bet in db_latest_bet:
-        if bet[3] == data['bet_desc'] and \
-                bet[1] == data['no_options']:
-            new_bet_id = bet[0]
-            break
-
-    if new_bet_id:
-        return jsonify({"message": "Bet added successfully!", "bet_id": new_bet_id}), 201
+    # Because adding bet will need to wait for a few sticks to make sure it appears
+    # So we can not check here. May be notify wait for some sticks ?
+    if tx_tick > 0:
+        message = 'Bet submitted successfully! '
+        message = message + 'TxTick: ' + str(tx_tick)
+        message = message + ', TxHash: ' + tx_hash
+        return jsonify({"message": message}), 201
     else:
-        return jsonify({"error": "Failed to find the newly created bet in the active list"}), 500
+        return jsonify({"error": "Failed to submit the bet"}), 500
 
 
 if __name__ == '__main__':
