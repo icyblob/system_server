@@ -9,8 +9,8 @@ app = Flask(__name__)
 CORS(app)
 
 # IP to a active node
-NODE_IP = '192.168.1.10'
-NODE_PORT = 12345
+NODE_IP = '5.199.134.150'
+NODE_PORT = 31844
 
 QUOTTERY_LIBS = 'libs/quottery_cpp/lib/libquottery_cpp.so'
 qt = quottery_cpp_wrapper.QuotteryCppWrapper(QUOTTERY_LIBS, NODE_IP, NODE_PORT)
@@ -158,7 +158,17 @@ def get_active_bets():
     conn.close()
 
     # Convert rows to a list of dictionaries
-    bets_list = [dict(row) for row in rows]
+    bets_list = []
+    for row in rows:
+        bet_row = dict(row)
+        bet_row['option_desc'] = json.dumps(bet_row['option_desc'].split(','))
+        # bet_row['current_bet_state'] = json.dumps(bet_row['current_bet_state'].split(','))
+        bet_row['oracle_id'] = json.dumps(bet_row['oracle_id'].split(','))
+        bet_row['oracle_fee'] = json.dumps(bet_row['oracle_fee'].split(','))
+        bet_row['current_num_selection'] = json.dumps(bet_row['current_num_selection'].split(','))
+        bet_row['betting_odds'] = json.dumps(bet_row['betting_odds'].split(','))
+        bets_list.append(bet_row)
+    # bets_list = [dict(row) for row in rows]
 
     # Reply with json
     return jsonify(bets_list)
