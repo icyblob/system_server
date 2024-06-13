@@ -27,7 +27,7 @@ def init_db():
             creator TEXT NOT NULL,
             bet_desc TEXT NOT NULL,
             option_desc TEXT NOT NULL,
-            current_bet_state TEXT NOT NULL,
+            current_bet_state TEXT,
             max_slot_per_option INTEGER NOT NULL,
             amount_per_bet_slot REAL NOT NULL,
             open_date TEXT,
@@ -36,7 +36,7 @@ def init_db():
             result INTEGER,
             no_ops INTEGER,
             oracle_id TEXT,
-            oracle_fee TEXT,
+            oracle_fee REAL,
             status INTEGER,
             current_num_selection TEXT,
             current_total_qus TEXT,
@@ -103,24 +103,33 @@ def update_database_with_active_bets():
     conn = sqlite3.connect(DATABASE_FILE)
     cursor = conn.cursor()
 
+    cursor.execute(f"SELECT bet_id FROM quottery_info")
+    db_bet_ids = cursor.fetchall()
+    db_bet_ids = [row[0] for row in db_bet_ids]
+    conn.close()
+
+
     # Update the database
     # TODO: Verify the existed one ? Or just update the newest one that is verified from node
-    new_bet_ids = []
+    active_bet_ids = []
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
     for key, active_bet in active_bets.items():
+        active_bet_ids.append(active_bet['bet_id'])
         if check_primary_key_exists(cursor=cursor, table_name='quottery_info',
                                  primary_key_column='bet_id',
                                  primary_key_value=active_bet['bet_id']) is False:
             cursor.execute('''
-                INSERT INTO quottery_info (bet_id, no_options, creator, bet_desc, option_desc, max_slot_per_option, amount_per_bet_slot, open_date, close_date, end_date, result, no_ops, oracle_id, oracle_fee, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ''', (
+                INSERT INTO quottery_info (bet_id, no_options,  creator,  bet_desc,  option_desc, current_bet_state,  max_slot_per_option,  amount_per_bet_slot,  open_date,  close_date,  end_date,  result,  no_ops,  oracle_id,  oracle_fee,  status, current_num_selection, current_total_qus, betting_odds)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ''', (
                 active_bet['bet_id'],
                 active_bet['no_options'],
                 active_bet['creator'],
                 active_bet['bet_desc'],
                 json.dumps(active_bet['option_desc']),  # This should be a separate table
-                json.dumps(active_bet['current_bet_state']), # This should be a separate table
+                json.dumps(active_bet['current_bet_state']),
                 active_bet['max_slot_per_option'],
-                active_bet['amount_per_bet_slot'],
+                active_bet['min_bet_amount'],
                 active_bet['open_date'],
                 active_bet['close_date'],
                 active_bet['end_date'],
@@ -128,17 +137,18 @@ def update_database_with_active_bets():
                 active_bet['no_ops'],
                 json.dumps(active_bet['oracle_id']), # This should be a separate table
                 json.dumps(active_bet['oracle_fee']), # This should be a separate table
-                active_bet['status'],
+                1,
                 json.dumps(['0'] * active_bet['no_options']),
                 '0',
                 json.dumps(['1'] * active_bet['no_options']),
             ))
-            new_bet_ids.append(key)
+
+    inactive_bet_ids = set(db_bet_ids) - set(active_bet_ids)
 
     # Mark the old bet status as 0
-    update_statement = 'UPDATE quottery_info SET status = 0 WHERE bet_id NOT IN ({});'.format(
-        ','.join('?' for _ in new_bet_ids))
-    cursor.execute(update_statement, new_bet_ids)
+    update_statement = 'UPDATE quottery_info SET status = 0 WHERE bet_id IN ({});'.format(
+        ','.join('?' for _ in inactive_bet_ids))
+    cursor.execute(update_statement, list(inactive_bet_ids))
 
     conn.commit()
     conn.close()
@@ -158,17 +168,17 @@ def get_active_bets():
     conn.close()
 
     # Convert rows to a list of dictionaries
-    bets_list = []
-    for row in rows:
-        bet_row = dict(row)
-        bet_row['option_desc'] = json.dumps(bet_row['option_desc'].split(','))
-        # bet_row['current_bet_state'] = json.dumps(bet_row['current_bet_state'].split(','))
-        bet_row['oracle_id'] = json.dumps(bet_row['oracle_id'].split(','))
-        bet_row['oracle_fee'] = json.dumps(bet_row['oracle_fee'].split(','))
-        bet_row['current_num_selection'] = json.dumps(bet_row['current_num_selection'].split(','))
-        bet_row['betting_odds'] = json.dumps(bet_row['betting_odds'].split(','))
-        bets_list.append(bet_row)
-    # bets_list = [dict(row) for row in rows]
+    bets_list = [dict(row) for row in rows]
+
+    # Hot fix for current_num_selection. Will remove using current_num_selection
+    for i, bl in enumerate(bets_list):
+        for key in bl:
+            if key == 'current_num_selection':
+                print(bl[key])
+                try:
+                    _ = json.loads(bl[key])
+                except:
+                    bets_list[i][key] = json.dumps(bl[key].split(','))
 
     # Reply with json
     return jsonify(bets_list)
@@ -239,7 +249,7 @@ def insert_user_bet_info(conn, data):
         INSERT INTO user_bet_info (bet_id, user_id, option_id, num_slots, amount_per_slot)
             VALUES (?, ?, ?, ?, ?) ''', (
         data['bet_id'],
-        data['user_id'],
+        "None",
         data['option_id'],
         data['num_slots'],
         data['amount_per_slot']
@@ -263,7 +273,8 @@ def update_betting_odds(conn, bet_id):
         else:
             betting_odds = [total_selections / selection if selection > 0 else total_selections for selection in current_num_selection]
 
-        betting_odds_str = ','.join(map(str, betting_odds))
+        betting_odds = [f'"{e}"' for e in betting_odds]
+        betting_odds_str = "[" + ','.join(betting_odds) + "]"
 
         # Update the betting_odds in the database
         cur.execute("UPDATE quottery_info SET betting_odds = ? WHERE bet_id = ?", (betting_odds_str, bet_id))
