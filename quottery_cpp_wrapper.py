@@ -153,8 +153,12 @@ class QuotteryCppWrapper:
         qt_output_result = BetInfoOutput()
         arrayPointer = (ctypes.c_uint32 * 1024)()
         numberOfActiveBets = ctypes.c_uint32(0)
-        self.quottery_cpp_func.quotteryWrapperGetActiveBet(self.nodeIP.encode(
+        sts = self.quottery_cpp_func.quotteryWrapperGetActiveBet(self.nodeIP.encode(
             'utf-8'), self.port, ctypes.pointer(numberOfActiveBets), arrayPointer)
+        if sts != 0:
+            print('Get active bets failed!')
+            return
+
         bets_count = numberOfActiveBets.value
 
         # Process each active bet and recording it
@@ -166,8 +170,12 @@ class QuotteryCppWrapper:
                 'utf-8'), self.port, bet_id)
 
             # Access the fields of the struct
-            self.quottery_cpp_func.quotteryWrapperGetBetInfo(self.nodeIP.encode(
+            sts = self.quottery_cpp_func.quotteryWrapperGetBetInfo(self.nodeIP.encode(
                 'utf-8'), self.port, bet_id, ctypes.byref(qt_output_result))
+
+            if sts != 0:
+                print('Get active bet failed: ', bet_id)
+                continue
 
             # Push the result into a list
             bet_info = {}
@@ -245,7 +253,7 @@ class QuotteryCppWrapper:
         tx_tick = (ctypes.c_uint32)()
         tx_hash = ctypes.create_string_buffer(60)
 
-        self.quottery_cpp_func.quotteryWrapperJoinBet(
+        sts = self.quottery_cpp_func.quotteryWrapperJoinBet(
             self.nodeIP.encode('utf-8'),
             self.port,
             betInfo['seed'].encode('utf-8'),
@@ -256,6 +264,10 @@ class QuotteryCppWrapper:
             self.scheduleTickOffset,
             tx_hash,
             ctypes.pointer(tx_tick))
+        if  sts!= 0:
+            print('Join bet failed!')
+            tx_tick = 0
+            tx_hash = "0"
 
         return (tx_hash.value.decode('utf-8'), int(tx_tick.value))
 
@@ -304,8 +316,12 @@ class QuotteryCppWrapper:
         tx_hash = ctypes.create_string_buffer(60)
 
         # Issue the bet
-        self.quottery_cpp_func.quotteryWrapperIssueBet(self.nodeIP.encode(
+        sts = self.quottery_cpp_func.quotteryWrapperIssueBet(self.nodeIP.encode(
             'utf-8'), self.port, betInfo['seed'].encode('utf-8'), qt_input_bet, self.scheduleTickOffset, tx_hash, ctypes.pointer(tx_tick))
 
-        return (tx_hash.value.decode('utf-8'), int(tx_tick.value))
+        if  sts!= 0:
+            print('Add bet failed!')
+            tx_tick = 0
+            tx_hash = "0"
 
+        return (tx_hash.value.decode('utf-8'), int(tx_tick.value))

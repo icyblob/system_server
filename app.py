@@ -18,7 +18,7 @@ QUOTTERY_LIBS = 'libs/quottery_cpp/lib/libquottery_cpp.so'
 qt = quottery_cpp_wrapper.QuotteryCppWrapper(QUOTTERY_LIBS, NODE_IP, NODE_PORT)
 
 DATABASE_FILE = 'database.db'
-UPDATE_INTERVAL = 120  # seconds
+UPDATE_INTERVAL = 3  # seconds
 
 def init_db():
     conn = sqlite3.connect(DATABASE_FILE)
@@ -72,6 +72,13 @@ def fetch_active_bets_from_node():
         print(f"Error fetching active bets from node: {e}")
         return {}
 
+def get_bet_info_from_node(betId):
+    try:
+        betInfo = qt.get_bet_info(betId)
+        return betInfo
+    except Exception as e:
+        print(f"Error fetching active bets from node: {e}")
+        return []
 
 def submit_join_bet(betInfo):
     try:
@@ -181,6 +188,9 @@ def update_database_with_active_bets():
             update_statement = 'UPDATE quottery_info SET status = 0 WHERE bet_id IN ({});'.format(
                 ','.join('?' for _ in inactive_bet_ids))
             cursor.execute(update_statement, list(inactive_bet_ids))
+
+            # Update the result of the old bet
+
 
             conn.commit()
             conn.close()
