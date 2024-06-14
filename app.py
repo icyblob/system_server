@@ -192,51 +192,48 @@ def update_database_with_active_bets():
             cursor = conn.cursor()
             for key, active_bet in active_bets.items():
                 active_bet_ids.append(active_bet['bet_id'])
-                if check_primary_key_exists(cursor=cursor, table_name='quottery_info',
-                                            primary_key_column='bet_id',
-                                            primary_key_value=active_bet['bet_id']) is False:
-                    cursor.execute('''
-                        INSERT INTO quottery_info (
-                                    bet_id,
-                                    no_options,
-                                    creator,
-                                    bet_desc,
-                                    option_desc,
-                                    current_bet_state,
-                                    max_slot_per_option,
-                                    amount_per_bet_slot,
-                                    open_date,
-                                    close_date,
-                                    end_date,
-                                    result,
-                                    no_ops,
-                                    oracle_id,
-                                    oracle_fee,
-                                    status,
-                                    current_num_selection,
-                                    current_total_qus,
-                                    betting_odds)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ''', (
-                        active_bet['bet_id'],
-                        active_bet['no_options'],
-                        active_bet['creator'],
-                        active_bet['bet_desc'],
-                        json.dumps(active_bet['option_desc']),  # This should be a separate table
-                        json.dumps(active_bet['current_bet_state']),
-                        active_bet['max_slot_per_option'],
-                        active_bet['amount_per_bet_slot'],
-                        active_bet['open_date'],
-                        active_bet['close_date'],
-                        active_bet['end_date'],
-                        active_bet['result'],
-                        active_bet['no_ops'],
-                        json.dumps(active_bet['oracle_id']),  # This should be a separate table
-                        json.dumps(active_bet['oracle_fee']),  # This should be a separate table
-                        1,
-                        json.dumps(active_bet['current_bet_state']),
-                        '0',
-                        json.dumps(['1'] * active_bet['no_options']),
-                    ))
+                cursor.execute('''
+                    INSERT OR REPLACE INTO quottery_info (
+                                bet_id,
+                                no_options,
+                                creator,
+                                bet_desc,
+                                option_desc,
+                                current_bet_state,
+                                max_slot_per_option,
+                                amount_per_bet_slot,
+                                open_date,
+                                close_date,
+                                end_date,
+                                result,
+                                no_ops,
+                                oracle_id,
+                                oracle_fee,
+                                status,
+                                current_num_selection,
+                                current_total_qus,
+                                betting_odds)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ''', (
+                    active_bet['bet_id'],
+                    active_bet['no_options'],
+                    active_bet['creator'],
+                    active_bet['bet_desc'],
+                    json.dumps(active_bet['option_desc']),  # This should be a separate table
+                    json.dumps(active_bet['current_bet_state']),
+                    active_bet['max_slot_per_option'],
+                    active_bet['amount_per_bet_slot'],
+                    active_bet['open_date'],
+                    active_bet['close_date'],
+                    active_bet['end_date'],
+                    active_bet['result'],
+                    active_bet['no_ops'],
+                    json.dumps(active_bet['oracle_id']),  # This should be a separate table
+                    json.dumps(active_bet['oracle_fee']),  # This should be a separate table
+                    1,
+                    json.dumps(active_bet['current_bet_state']),
+                    '0',
+                    json.dumps(['1'] * active_bet['no_options']),
+                ))
 
             inactive_bet_ids = set(db_bet_ids) - set(active_bet_ids)
 
