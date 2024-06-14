@@ -4,11 +4,13 @@ import json
 import quottery_cpp_wrapper
 from flask_cors import CORS
 from flask import Flask, request, jsonify
+from threading import Thread
+import time
 
 app = Flask(__name__)
 CORS(app)
 
-# IP to a active node
+# IP to an active node
 NODE_IP = '5.199.134.150'
 NODE_PORT = 31844
 
@@ -16,6 +18,7 @@ QUOTTERY_LIBS = 'libs/quottery_cpp/lib/libquottery_cpp.so'
 qt = quottery_cpp_wrapper.QuotteryCppWrapper(QUOTTERY_LIBS, NODE_IP, NODE_PORT)
 
 DATABASE_FILE = 'database.db'
+UPDATE_INTERVAL = 3  # seconds
 
 def init_db():
     conn = sqlite3.connect(DATABASE_FILE)
@@ -48,7 +51,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS user_bet_info (
             user_bet_id INTEGER PRIMARY KEY AUTOINCREMENT,
             bet_id INTEGER NOT NULL,
-            user_id TEXT NOT NULL ,
+            user_id TEXT NOT NULL,
             option_id INTEGER NOT NULL,
             num_slots INTEGER NOT NULL,
             FOREIGN KEY (bet_id) REFERENCES quottery_info(bet_id)
@@ -61,18 +64,29 @@ def init_db():
 def fetch_active_bets_from_node():
     # Connect to the node and get current active bets
     # TODO: Process the disconnected issue
-    active_bets = qt.get_active_bets()
-    return active_bets
+    try:
+        active_bets = qt.get_active_bets()
+        return active_bets
+    except Exception as e:
+        print(f"Error fetching active bets from node: {e}")
+        return {}
 
 
 def submit_join_bet(betInfo):
-    tx_hash, tx_tick = qt.join_bet(betInfo)
-    return (tx_hash, tx_tick)
-
+    try:
+        tx_hash, tx_tick = qt.join_bet(betInfo)
+        return (tx_hash, tx_tick)
+    except Exception as e:
+        print(f"Error submitting join bet: {e}")
+        return (None, -1)
 
 def submit_add_bet(betInfo):
-    tx_hash, tx_tick = qt.add_bet(betInfo)
-    return (tx_hash, tx_tick)
+    try:
+        tx_hash, tx_tick = qt.add_bet(betInfo)
+        return (tx_hash, tx_tick)
+    except Exception as e:
+        print(f"Error submitting add bet: {e}")
+        return (None, -1)
 
 
 def check_primary_key_exists(cursor, table_name, primary_key_column, primary_key_value):
@@ -91,75 +105,73 @@ def check_primary_key_exists(cursor, table_name, primary_key_column, primary_key
 
 
 def update_database_with_active_bets():
+    while True:
+        try:
+            active_bets = fetch_active_bets_from_node()
 
-    # Fetch active bets from the nodes
-    active_bets = fetch_active_bets_from_node()
+            # Verify the active_bets
+            if len(active_bets) == 0:
+                print('[WARNING] Active bets from node is empty! Display the local database')
 
-    # Verify the active_bets
-    if len(active_bets) == 0:
-        print('[WARNING] Active bets from node is empty! Display the local database')
+            # Connect to the database
+            conn = sqlite3.connect(DATABASE_FILE)
+            cursor = conn.cursor()
 
-    # Connect to the database
-    conn = sqlite3.connect(DATABASE_FILE)
-    cursor = conn.cursor()
+            cursor.execute(f"SELECT bet_id FROM quottery_info")
+            db_bet_ids = cursor.fetchall()
+            db_bet_ids = [row[0] for row in db_bet_ids]
+            conn.close()
 
-    cursor.execute(f"SELECT bet_id FROM quottery_info")
-    db_bet_ids = cursor.fetchall()
-    db_bet_ids = [row[0] for row in db_bet_ids]
-    conn.close()
+            # Update the database
+            # TODO: Verify the existed one ? Or just update the newest one that is verified from node
+            active_bet_ids = []
+            conn = sqlite3.connect(DATABASE_FILE)
+            cursor = conn.cursor()
+            for key, active_bet in active_bets.items():
+                active_bet_ids.append(active_bet['bet_id'])
+                if check_primary_key_exists(cursor=cursor, table_name='quottery_info',
+                                         primary_key_column='bet_id',
+                                         primary_key_value=active_bet['bet_id']) is False:
+                    cursor.execute('''
+                        INSERT INTO quottery_info (bet_id, no_options, creator, bet_desc, option_desc, current_bet_state, max_slot_per_option, amount_per_bet_slot, open_date, close_date, end_date, result, no_ops, oracle_id, oracle_fee, status, current_num_selection, current_total_qus, betting_odds)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ''', (
+                        active_bet['bet_id'],
+                        active_bet['no_options'],
+                        active_bet['creator'],
+                        active_bet['bet_desc'],
+                        json.dumps(active_bet['option_desc']),  # This should be a separate table
+                        json.dumps(active_bet['current_bet_state']),
+                        active_bet['max_slot_per_option'],
+                        active_bet['min_bet_amount'],
+                        active_bet['open_date'],
+                        active_bet['close_date'],
+                        active_bet['end_date'],
+                        active_bet['result'],
+                        active_bet['no_ops'],
+                        json.dumps(active_bet['oracle_id']), # This should be a separate table
+                        json.dumps(active_bet['oracle_fee']), # This should be a separate table
+                        1,
+                        json.dumps(['0'] * active_bet['no_options']),
+                        '0',
+                        json.dumps(['1'] * active_bet['no_options']),
+                    ))
 
+            inactive_bet_ids = set(db_bet_ids) - set(active_bet_ids)
 
-    # Update the database
-    # TODO: Verify the existed one ? Or just update the newest one that is verified from node
-    active_bet_ids = []
-    conn = sqlite3.connect(DATABASE_FILE)
-    cursor = conn.cursor()
-    for key, active_bet in active_bets.items():
-        active_bet_ids.append(active_bet['bet_id'])
-        if check_primary_key_exists(cursor=cursor, table_name='quottery_info',
-                                 primary_key_column='bet_id',
-                                 primary_key_value=active_bet['bet_id']) is False:
-            cursor.execute('''
-                INSERT INTO quottery_info (bet_id, no_options,  creator,  bet_desc,  option_desc, current_bet_state,  max_slot_per_option,  amount_per_bet_slot,  open_date,  close_date,  end_date,  result,  no_ops,  oracle_id,  oracle_fee,  status, current_num_selection, current_total_qus, betting_odds)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ''', (
-                active_bet['bet_id'],
-                active_bet['no_options'],
-                active_bet['creator'],
-                active_bet['bet_desc'],
-                json.dumps(active_bet['option_desc']),  # This should be a separate table
-                json.dumps(active_bet['current_bet_state']),
-                active_bet['max_slot_per_option'],
-                active_bet['min_bet_amount'],
-                active_bet['open_date'],
-                active_bet['close_date'],
-                active_bet['end_date'],
-                active_bet['result'],
-                active_bet['no_ops'],
-                json.dumps(active_bet['oracle_id']), # This should be a separate table
-                json.dumps(active_bet['oracle_fee']), # This should be a separate table
-                1,
-                json.dumps(['0'] * active_bet['no_options']),
-                '0',
-                json.dumps(['1'] * active_bet['no_options']),
-            ))
+            # Mark the old bet status as 0
+            update_statement = 'UPDATE quottery_info SET status = 0 WHERE bet_id IN ({});'.format(
+                ','.join('?' for _ in inactive_bet_ids))
+            cursor.execute(update_statement, list(inactive_bet_ids))
 
-    inactive_bet_ids = set(db_bet_ids) - set(active_bet_ids)
-
-    # Mark the old bet status as 0
-    update_statement = 'UPDATE quottery_info SET status = 0 WHERE bet_id IN ({});'.format(
-        ','.join('?' for _ in inactive_bet_ids))
-    cursor.execute(update_statement, list(inactive_bet_ids))
-
-    conn.commit()
-    conn.close()
-
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"Error updating database: {e}")
+        finally:
+            time.sleep(UPDATE_INTERVAL)  # Wait for 3 seconds before the next update
 
 @app.route('/get_active_bets', methods=['GET'])
 def get_active_bets():
-    # Fetch data and update the SQLite database with the newest active bets
-    update_database_with_active_bets()
-
-    # Load the updated bet list from the updated SQLite database
     conn = sqlite3.connect(DATABASE_FILE)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -304,7 +316,7 @@ def join_bet():
 
     if tx_tick > 0:
         message = 'Bet joined successfully.'
-        message = message + 'TxTick: ' + str(tx_tick)
+        message = message + ' TxTick: ' + str(tx_tick)
         message = message + ', TxHash: ' + tx_hash
         return jsonify({"message": message}), 201
     else:
@@ -323,7 +335,7 @@ def add_bet():
     # So we can not check here. May be notify wait for some sticks ?
     if tx_tick > 0:
         message = 'Bet submitted successfully! '
-        message = message + 'TxTick: ' + str(tx_tick)
+        message = message + ' TxTick: ' + str(tx_tick)
         message = message + ', TxHash: ' + tx_hash
         return jsonify({"message": message}), 201
     else:
@@ -332,4 +344,7 @@ def add_bet():
 
 if __name__ == '__main__':
     init_db()
+    update_thread = Thread(target=update_database_with_active_bets)
+    update_thread.daemon = True
+    update_thread.start()
     app.run(host='0.0.0.0', port=5000, debug=True)

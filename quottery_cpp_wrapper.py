@@ -81,7 +81,7 @@ class QuotteryCppWrapper:
 
         self.nodeIP = nodeIP
         self.port = port
-        self.scheduleTickOffset = 10
+        self.scheduleTickOffset = 5
 
         # Quottery related
         self.quottery_cpp_func = ctypes.CDLL(libs)
