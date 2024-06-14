@@ -112,7 +112,6 @@ def update_database_with_active_bets():
             # Verify the active_bets
             if len(active_bets) == 0:
                 print('[WARNING] Active bets from node is empty! Display the local database')
-
             # Connect to the database
             conn = sqlite3.connect(DATABASE_FILE)
             cursor = conn.cursor()
@@ -151,7 +150,7 @@ def update_database_with_active_bets():
                         json.dumps(active_bet['oracle_id']), # This should be a separate table
                         json.dumps(active_bet['oracle_fee']), # This should be a separate table
                         1,
-                        json.dumps(['0'] * active_bet['no_options']),
+                        json.dumps(active_bet['current_bet_state']),
                         '0',
                         json.dumps(['1'] * active_bet['no_options']),
                     ))
@@ -182,16 +181,6 @@ def get_active_bets():
     # Convert rows to a list of dictionaries
     bets_list = [dict(row) for row in rows]
 
-    # Hot fix for current_num_selection. Will remove using current_num_selection
-    for i, bl in enumerate(bets_list):
-        for key in bl:
-            if key == 'current_num_selection':
-                print(bl[key])
-                try:
-                    _ = json.loads(bl[key])
-                except:
-                    bets_list[i][key] = json.dumps(bl[key].split(','))
-
     # Reply with json
     return jsonify(bets_list)
 
@@ -199,7 +188,7 @@ def get_active_bets():
 def create_trigger(conn):
     cursor = conn.cursor()
     cursor.execute('''
-        -- Create trigger to update current_num_selection and current_total_qus
+        -- Create trigger to update current_total_qus
         CREATE TRIGGER IF NOT EXISTS after_insert_user_bet_info
         AFTER INSERT ON user_bet_info
         FOR EACH ROW
@@ -210,44 +199,6 @@ def create_trigger(conn):
                 SELECT COALESCE(SUM(num_slots * amount_per_slot), 0)
                 FROM user_bet_info
                 WHERE bet_id = NEW.bet_id
-            )
-            WHERE bet_id = NEW.bet_id;
-        
-            -- Update current_num_selection
-            UPDATE quottery_info
-            SET current_num_selection = (
-                WITH RECURSIVE generate_options(option_id) AS (
-                    SELECT 0 AS option_id
-                    UNION ALL
-                    SELECT option_id + 1
-                    FROM generate_options
-                    WHERE option_id + 1 < (SELECT no_options FROM quottery_info WHERE bet_id = NEW.bet_id)
-                ),
-                option_counts AS (
-                    SELECT 
-                        option_id, 
-                        SUM(num_slots) AS num_slots
-                    FROM 
-                        user_bet_info
-                    WHERE bet_id = NEW.bet_id
-                    GROUP BY 
-                        option_id
-                ),
-                filled_options AS (
-                    SELECT 
-                        generate_options.option_id,
-                        COALESCE(option_counts.num_slots, 0) AS num_slots
-                    FROM 
-                        generate_options
-                    LEFT JOIN 
-                        option_counts
-                    ON 
-                        generate_options.option_id = option_counts.option_id
-                )
-                SELECT 
-                    GROUP_CONCAT(num_slots, ',')
-                FROM 
-                    filled_options
             )
             WHERE bet_id = NEW.bet_id;
         END;
@@ -270,20 +221,20 @@ def insert_user_bet_info(conn, data):
 
 
 def update_betting_odds(conn, bet_id):
-    # Retrieve current_num_selection for the given bet_id
+    # Retrieve current_bet_state for the given bet_id
     cur = conn.cursor()
-    cur.execute("SELECT current_num_selection FROM quottery_info WHERE bet_id = ?", (bet_id,))
+    cur.execute("SELECT current_bet_state FROM quottery_info WHERE bet_id = ?", (bet_id,))
     row = cur.fetchone()
 
     if row:
-        current_num_selection = list(map(int, row[0].split(',')))
-        total_selections = sum(current_num_selection)
+        current_bet_state = row[0]
+        total_selections = sum(current_bet_state)
 
         # Calculate betting odds
         if total_selections == 0:
-            betting_odds = [1] * len(current_num_selection)
+            betting_odds = [1] * len(current_bet_state)
         else:
-            betting_odds = [total_selections / selection if selection > 0 else total_selections for selection in current_num_selection]
+            betting_odds = [total_selections / selection if selection > 0 else total_selections for selection in current_bet_state]
 
         betting_odds = [f'"{e}"' for e in betting_odds]
         betting_odds_str = "[" + ','.join(betting_odds) + "]"
