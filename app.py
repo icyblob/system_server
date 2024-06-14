@@ -20,6 +20,7 @@ qt = quottery_cpp_wrapper.QuotteryCppWrapper(QUOTTERY_LIBS, NODE_IP, NODE_PORT)
 DATABASE_FILE = 'database.db'
 UPDATE_INTERVAL = 3  # seconds
 
+
 def init_db():
     conn = sqlite3.connect(DATABASE_FILE)
     cursor = conn.cursor()
@@ -72,6 +73,7 @@ def fetch_active_bets_from_node():
         print(f"Error fetching active bets from node: {e}")
         return {}
 
+
 def get_bet_info_from_node(betId):
     try:
         betInfo = qt.get_bet_info(betId)
@@ -80,6 +82,7 @@ def get_bet_info_from_node(betId):
         print(f"Error fetching active bets from node: {e}")
         return []
 
+
 def submit_join_bet(betInfo):
     try:
         tx_hash, tx_tick = qt.join_bet(betInfo)
@@ -87,6 +90,7 @@ def submit_join_bet(betInfo):
     except Exception as e:
         print(f"Error submitting join bet: {e}")
         return (None, -1)
+
 
 def submit_add_bet(betInfo):
     try:
@@ -110,6 +114,58 @@ def check_primary_key_exists(cursor, table_name, primary_key_column, primary_key
     query = f"SELECT 1 FROM {table_name} WHERE {primary_key_column} = ?"
     cursor.execute(query, (primary_key_value,))
     return cursor.fetchone() is not None
+
+
+def update_current_total_qus(conn, bet_id):
+    cursor = conn.cursor()
+
+    # Fetch current_bet_state and amount_per_bet_slot
+    cursor.execute('''
+        SELECT current_bet_state, amount_per_bet_slot
+        FROM quottery_info
+        WHERE bet_id = ?
+    ''', (bet_id,))
+    row = cursor.fetchone()
+
+    if row:
+        current_bet_state = json.loads(row[0])
+        amount_per_bet_slot = row[1]
+        total_selections = sum(current_bet_state)
+        current_total_qus = total_selections * amount_per_bet_slot
+
+        # Update current_total_qus in the database
+        cursor.execute('''
+            UPDATE quottery_info
+            SET current_total_qus = ?
+            WHERE bet_id = ?
+        ''', (current_total_qus, bet_id))
+
+    conn.commit()
+
+
+def update_betting_odds(conn, bet_id):
+    # Retrieve current_bet_state for the given bet_id
+    cur = conn.cursor()
+    cur.execute("SELECT current_bet_state FROM quottery_info WHERE bet_id = ?", (bet_id,))
+    row = cur.fetchone()
+
+    if row:
+        # TODO: verify this
+        current_bet_state = json.loads(row[0])
+        total_selections = sum(current_bet_state)
+
+        # Calculate betting odds
+        if total_selections == 0:
+            betting_odds = [1] * len(current_bet_state)
+        else:
+            betting_odds = [total_selections / selection if selection > 0 else total_selections for selection in
+                            current_bet_state]
+
+        betting_odds = [f'"{e}"' for e in betting_odds]
+        betting_odds_str = "[" + ','.join(betting_odds) + "]"
+
+        # Update the betting_odds in the database
+        cur.execute("UPDATE quottery_info SET betting_odds = ? WHERE bet_id = ?", (betting_odds_str, bet_id))
 
 
 def update_database_with_active_bets():
@@ -137,8 +193,8 @@ def update_database_with_active_bets():
             for key, active_bet in active_bets.items():
                 active_bet_ids.append(active_bet['bet_id'])
                 if check_primary_key_exists(cursor=cursor, table_name='quottery_info',
-                                         primary_key_column='bet_id',
-                                         primary_key_value=active_bet['bet_id']) is False:
+                                            primary_key_column='bet_id',
+                                            primary_key_value=active_bet['bet_id']) is False:
                     cursor.execute('''
                         INSERT INTO quottery_info (
                                     bet_id,
@@ -174,8 +230,8 @@ def update_database_with_active_bets():
                         active_bet['end_date'],
                         active_bet['result'],
                         active_bet['no_ops'],
-                        json.dumps(active_bet['oracle_id']), # This should be a separate table
-                        json.dumps(active_bet['oracle_fee']), # This should be a separate table
+                        json.dumps(active_bet['oracle_id']),  # This should be a separate table
+                        json.dumps(active_bet['oracle_fee']),  # This should be a separate table
                         1,
                         json.dumps(active_bet['current_bet_state']),
                         '0',
@@ -189,8 +245,9 @@ def update_database_with_active_bets():
                 ','.join('?' for _ in inactive_bet_ids))
             cursor.execute(update_statement, list(inactive_bet_ids))
 
-            # Update the result of the old bet
-
+            for bet_id in active_bet_ids:
+                update_betting_odds(conn, bet_id)
+                update_current_total_qus(conn, bet_id)
 
             conn.commit()
             conn.close()
@@ -198,6 +255,7 @@ def update_database_with_active_bets():
             print(f"Error updating database: {e}")
         finally:
             time.sleep(UPDATE_INTERVAL)  # Wait for 3 seconds before the next update
+
 
 @app.route('/get_active_bets', methods=['GET'])
 def get_active_bets():
@@ -215,27 +273,6 @@ def get_active_bets():
     return jsonify(bets_list)
 
 
-def create_trigger(conn):
-    cursor = conn.cursor()
-    cursor.execute('''
-        -- Create trigger to update current_total_qus
-        CREATE TRIGGER IF NOT EXISTS after_insert_user_bet_info
-        AFTER INSERT ON user_bet_info
-        FOR EACH ROW
-        BEGIN
-            -- Update current_total_qus
-            UPDATE quottery_info
-            SET current_total_qus = (
-                SELECT COALESCE(SUM(num_slots * amount_per_slot), 0)
-                FROM user_bet_info
-                WHERE bet_id = NEW.bet_id
-            )
-            WHERE bet_id = NEW.bet_id;
-        END;
-    ''')
-    conn.commit()
-
-
 def insert_user_bet_info(conn, data):
     cursor = conn.cursor()
     cursor.execute('''
@@ -248,38 +285,12 @@ def insert_user_bet_info(conn, data):
         data['amount_per_slot']
     ))
     conn.commit()
-
-
-def update_betting_odds(conn, bet_id):
-    # Retrieve current_bet_state for the given bet_id
-    cur = conn.cursor()
-    cur.execute("SELECT current_bet_state FROM quottery_info WHERE bet_id = ?", (bet_id,))
-    row = cur.fetchone()
-
-    if row:
-        # TODO: verify this
-        current_bet_state = json.loads(row[0])
-        total_selections = sum(current_bet_state)
-
-        # Calculate betting odds
-        if total_selections == 0:
-            betting_odds = [1] * len(current_bet_state)
-        else:
-            betting_odds = [total_selections / selection if selection > 0 else total_selections for selection in current_bet_state]
-
-        betting_odds = [f'"{e}"' for e in betting_odds]
-        betting_odds_str = "[" + ','.join(betting_odds) + "]"
-
-        # Update the betting_odds in the database
-        cur.execute("UPDATE quottery_info SET betting_odds = ? WHERE bet_id = ?", (betting_odds_str, bet_id))
-        print(f"Betting odds updated for bet_id {bet_id}")
-    else:
-        print(f"No entry found for bet_id {bet_id}")
+    update_current_total_qus(conn, data['bet_id'])
+    conn.commit()
 
 
 @app.route('/join_bet', methods=['POST'])
 def join_bet():
-
     # Get data from request
     data = request.json
 
@@ -290,7 +301,6 @@ def join_bet():
     # So we can not check here. May be notify wait for some sticks ?
 
     conn = sqlite3.connect(DATABASE_FILE)
-    create_trigger(conn)
     insert_user_bet_info(conn, data)
     update_betting_odds(conn, data['bet_id'])
     conn.commit()
@@ -304,9 +314,9 @@ def join_bet():
     else:
         return jsonify({"error": "Failed to submit the bet"}), 500
 
+
 @app.route('/add_bet', methods=['POST'])
 def add_bet():
-
     # Get the request
     data = request.json
 
