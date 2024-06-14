@@ -183,7 +183,9 @@ class QuotteryCppWrapper:
             bet_info['creator'] = identity_buffer.value.decode('utf-8')
 
             # Bet fee
-            bet_info['min_bet_amount'] = qt_output_result.minBetAmount
+            # TODO: Correct the naming in core
+            # https://github.com/qubic/core/blob/dkat-quottery-sc/src/contracts/Quottery.h#L524
+            bet_info['amount_per_bet_slot'] = qt_output_result.minBetAmount
 
             # Get the options descriton
             bet_info['option_desc'] = [''.join(chr(

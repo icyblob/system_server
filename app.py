@@ -18,7 +18,7 @@ QUOTTERY_LIBS = 'libs/quottery_cpp/lib/libquottery_cpp.so'
 qt = quottery_cpp_wrapper.QuotteryCppWrapper(QUOTTERY_LIBS, NODE_IP, NODE_PORT)
 
 DATABASE_FILE = 'database.db'
-UPDATE_INTERVAL = 3  # seconds
+UPDATE_INTERVAL = 120  # seconds
 
 def init_db():
     conn = sqlite3.connect(DATABASE_FILE)
@@ -54,6 +54,7 @@ def init_db():
             user_id TEXT NOT NULL,
             option_id INTEGER NOT NULL,
             num_slots INTEGER NOT NULL,
+            amount_per_slot REAL NOT NULL,
             FOREIGN KEY (bet_id) REFERENCES quottery_info(bet_id)
         )
     ''')
@@ -132,7 +133,26 @@ def update_database_with_active_bets():
                                          primary_key_column='bet_id',
                                          primary_key_value=active_bet['bet_id']) is False:
                     cursor.execute('''
-                        INSERT INTO quottery_info (bet_id, no_options, creator, bet_desc, option_desc, current_bet_state, max_slot_per_option, amount_per_bet_slot, open_date, close_date, end_date, result, no_ops, oracle_id, oracle_fee, status, current_num_selection, current_total_qus, betting_odds)
+                        INSERT INTO quottery_info (
+                                    bet_id,
+                                    no_options,
+                                    creator,
+                                    bet_desc,
+                                    option_desc,
+                                    current_bet_state,
+                                    max_slot_per_option,
+                                    amount_per_bet_slot,
+                                    open_date,
+                                    close_date,
+                                    end_date,
+                                    result,
+                                    no_ops,
+                                    oracle_id,
+                                    oracle_fee,
+                                    status,
+                                    current_num_selection,
+                                    current_total_qus,
+                                    betting_odds)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ''', (
                         active_bet['bet_id'],
                         active_bet['no_options'],
@@ -141,7 +161,7 @@ def update_database_with_active_bets():
                         json.dumps(active_bet['option_desc']),  # This should be a separate table
                         json.dumps(active_bet['current_bet_state']),
                         active_bet['max_slot_per_option'],
-                        active_bet['min_bet_amount'],
+                        active_bet['amount_per_bet_slot'],
                         active_bet['open_date'],
                         active_bet['close_date'],
                         active_bet['end_date'],
@@ -227,7 +247,8 @@ def update_betting_odds(conn, bet_id):
     row = cur.fetchone()
 
     if row:
-        current_bet_state = row[0]
+        # TODO: verify this
+        current_bet_state = json.loads(row[0])
         total_selections = sum(current_bet_state)
 
         # Calculate betting odds
