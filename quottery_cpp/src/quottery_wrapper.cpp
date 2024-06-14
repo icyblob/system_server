@@ -11,8 +11,16 @@ int quotteryWrapperGetActiveBet(
     uint32_t& betCount,
     uint32_t* betIDs)
 {
-    static getActiveBet_output result;
-    quotteryGetActiveBet(nodeIp, nodePort, result);
+    getActiveBet_output result;
+    try
+    {
+        quotteryGetActiveBet(nodeIp, nodePort, result);
+    }
+    catch(const std::exception& e)
+    {
+        std::cerr << e.what() << '\n';
+        return 1;
+    }
 
     betCount = result.count;
     std::copy(result.betId, result.betId + betCount, betIDs);
@@ -22,7 +30,15 @@ int quotteryWrapperGetActiveBet(
 
 int quotteryWrapperPrintBetInfo(const char* nodeIp, const int nodePort, int betId)
 {
-    quotteryPrintBetInfo(nodeIp, nodePort, betId);
+    try
+    {
+        quotteryPrintBetInfo(nodeIp, nodePort, betId);
+    }
+    catch(const std::exception& e)
+    {
+        std::cerr << e.what() << '\n';
+        return 1;
+    }
 
     return 0;
 }
@@ -35,7 +51,15 @@ int quotteryWrapperGetBetInfo(
     BetInfoOutput& result)
 {
     getBetInfo_output betOutput;
-    quotteryGetBetInfo(nodeIp, nodePort, betId, betOutput);
+    try
+    {
+        quotteryGetBetInfo(nodeIp, nodePort, betId, betOutput);
+    }
+    catch(const std::exception& e)
+    {
+        std::cerr << e.what() << '\n';
+        return 1;
+    }
 
     result.betId = betOutput.betId;
     result.nOption = betOutput.nOption;
@@ -70,8 +94,25 @@ int quotteryWrapperJoinBet(
     char* txHash,
     uint32_t& txTick)
 {
-    quotteryJoinBet(
-        nodeIp, nodePort, seed, betId, numberOfBetSlot, amountPerSlot, option, scheduledTickOffset, txHash, &txTick);
+    try
+    {
+        quotteryJoinBet(
+            nodeIp,
+            nodePort,
+            seed,
+            betId,
+            numberOfBetSlot,
+            amountPerSlot,
+            option,
+            scheduledTickOffset,
+            txHash,
+            &txTick);
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << e.what() << '\n';
+        return 1;
+    }
 
     return 0;
 }
@@ -99,7 +140,15 @@ int quotteryWrapperIssueBet(
     betInput.maxBetSlotPerOption = betInfo.maxBetSlotPerOption;
     betInput.numberOfOption = betInfo.numberOfOption;
 
-    quotterySubmitIssueBet(nodeIp, nodePort, seed, betInput, scheduledTickOffset, txHash, &txTick);
+    try
+    {
+        quotterySubmitIssueBet(nodeIp, nodePort, seed, betInput, scheduledTickOffset, txHash, &txTick);
+    }
+    catch(const std::exception& e)
+    {
+        std::cerr << e.what() << '\n';
+        return 1;
+    }
 
     return 0;
 }
