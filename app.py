@@ -174,7 +174,7 @@ def update_database_with_active_bets():
             active_bets = fetch_active_bets_from_node()
 
             # Verify the active_bets
-            if len(active_bets) == 0:
+            if not active_bets:
                 print('[WARNING] Active bets from node is empty! Display the local database')
             # Connect to the database
             conn = sqlite3.connect(DATABASE_FILE)

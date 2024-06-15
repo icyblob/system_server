@@ -155,26 +155,27 @@ class QuotteryCppWrapper:
         numberOfActiveBets = ctypes.c_uint32(0)
         sts = self.quottery_cpp_func.quotteryWrapperGetActiveBet(self.nodeIP.encode(
             'utf-8'), self.port, ctypes.pointer(numberOfActiveBets), arrayPointer)
-        if sts != 0:
+        if sts:
             print('Get active bets failed!')
             return
 
         bets_count = numberOfActiveBets.value
+        print("There are", bets_count, "bets:", arrayPointer[0:bets_count])
 
         # Process each active bet and recording it
         for i in range(0, bets_count):
             bet_id = arrayPointer[i]
 
-            # Print the bet for debuggin
-            self.quottery_cpp_func.quotteryWrapperPrintBetInfo(self.nodeIP.encode(
-                'utf-8'), self.port, bet_id)
+            # Print the bet for debugging
+            #self.quottery_cpp_func.quotteryWrapperPrintBetInfo(self.nodeIP.encode(
+            #    'utf-8'), self.port, bet_id)
 
             # Access the fields of the struct
             sts = self.quottery_cpp_func.quotteryWrapperGetBetInfo(self.nodeIP.encode(
                 'utf-8'), self.port, bet_id, ctypes.byref(qt_output_result))
 
-            if sts != 0:
-                print('Get active bet failed: ', bet_id)
+            if sts:
+                print('[WARNING] Failed to get info of bet ID', bet_id)
                 continue
 
             # Push the result into a list
