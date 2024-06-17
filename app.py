@@ -41,6 +41,7 @@ def init_db():
             no_ops INTEGER,
             oracle_id TEXT,
             oracle_fee REAL,
+            oracle_vote TEXT,
             status INTEGER,
             current_num_selection TEXT,
             current_total_qus TEXT,
@@ -209,11 +210,12 @@ def update_database_with_active_bets():
                                 no_ops,
                                 oracle_id,
                                 oracle_fee,
+                                oracle_vote,
                                 status,
                                 current_num_selection,
                                 current_total_qus,
                                 betting_odds)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ''', (
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ''', (
                     active_bet['bet_id'],
                     active_bet['no_options'],
                     active_bet['creator'],
@@ -229,6 +231,7 @@ def update_database_with_active_bets():
                     active_bet['no_ops'],
                     json.dumps(active_bet['oracle_id']),  # This should be a separate table
                     json.dumps(active_bet['oracle_fee']),  # This should be a separate table
+                    json.dumps(active_bet['oracle_vote']),  # This should be a separate table
                     1,
                     json.dumps(active_bet['current_bet_state']),
                     '0',

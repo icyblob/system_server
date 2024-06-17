@@ -1,5 +1,6 @@
 import ctypes
 from collections import defaultdict
+from datetime import datetime, timezone
 
 # Define the C++ Quottery struct wrapper
 
@@ -209,6 +210,7 @@ class QuotteryCppWrapper:
         # Oracle id and fee. Assume they are follow extract order
         bet_info['oracle_id'] = []
         bet_info['oracle_fee'] = []
+        bet_info['oracle_vote'] = []
         for i in range(0, self.maxNumberOfOracleProvides):
             # Pack the oracle ID
             offset = 32 * i
@@ -217,20 +219,27 @@ class QuotteryCppWrapper:
             all_zeros = all(value == 0 for value in oracle_id_public_key[:32])
             # Only add if public key is not fully zeros
             if not all_zeros:
+                # Append the oracle ID
                 identity_buffer = ctypes.create_string_buffer(60)
                 self.quottery_cpp_func.getIdentityFromPublicKeyWrapper(
                     oracle_id_public_key, identity_buffer)
                 bet_info['oracle_id'].append(identity_buffer.value.decode('utf-8'))
 
-                # TODO: Check here
+                # Append the oracle ID
                 oracle_fee = ctypes.cast(ctypes.addressof(
                     qt_output_result.oracleFees) + i * 4, ctypes.POINTER(ctypes.c_uint32))
                 bet_info['oracle_fee'].append(float(oracle_fee[0]) / 100)
+
+                # Init the voting of Oracle as invalid
+                bet_info['oracle_vote'].append(-1)
         bet_info['no_ops'] = len(bet_info['oracle_id'])
 
         # Get the result of the votes
-        bet_info['op_vote_options'] = [i for i in qt_output_result.betResultWonOption]
-        bet_info['op_vote_ids'] = [i for i in qt_output_result.betResultOPId]
+        for i in range(0, self.maxNumberOfOracleProvides):
+            op_vote_option = qt_output_result.betResultWonOption[i]
+            op_vote_id = qt_output_result.betResultOPId[i]
+            if op_vote_option > 0 and op_vote_id > 0:
+                bet_info['oracle_vote'][op_vote_id] = op_vote_option
 
         return bet_info
 
@@ -274,40 +283,46 @@ class QuotteryCppWrapper:
             bet_info = self.get_bet_info(bet_id)
 
             # Get the result bet and also set the current date
-            required_votes = bet_info['no_ops'] * 2 /  3
+            number_of_oracle_operators = bet_info['no_ops']
+            required_votes = number_of_oracle_operators * 2 /  3
             win_option = -1
             op_voted_count = 0
+            dominated_votes = 0
             vote_count = defaultdict(int)
-            if len(bet_info['op_vote_options']) == self.maxNumberOfOracleProvides and len(bet_info['op_vote_ids']) == self.maxNumberOfOracleProvides:
-                op_vote_options = bet_info['op_vote_options']
-                op_vote_ids = bet_info['op_vote_ids']
-                for i in range(0, self.maxNumberOfOracleProvides):
-                    if op_vote_ids[i] > -1 and op_vote_options[i] > -1:
-                        vote_count[op_vote_options[i]] += 1
-                        op_voted_count += 1
-                # Decide the win option
-                ## Find the key with the max value
+            op_vote_options = bet_info['oracle_vote']
+            for i in range(0, number_of_oracle_operators):
+                if op_vote_options[i] > -1:
+                    vote_count[op_vote_options[i]] += 1
+                    op_voted_count += 1
+            # Decide the win option
+            ## Find the key with the max value
+            if op_voted_count > 0:
                 key_with_max_votes = max(vote_count, key=vote_count.get)
                 dominated_votes = vote_count[key_with_max_votes]
 
-                ## Check the win condition
-                ## If the dominated votes are satisfied the win conditions (>= 2/3 total of OPs)
-                if dominated_votes >= required_votes:
-                    win_option = key_with_max_votes
-                    bet_info['result'] = win_option
-                    # Close the bet
-                    bet_info['status'] = 0
-                else:
-                    # The result is considered invalid
-                    bet_info['result'] = -1
+            ## Check the win condition
+            ## If the dominated votes are satisfied the win conditions (>= 2/3 total of OPs)
+            if dominated_votes >= required_votes:
+                win_option = key_with_max_votes
+                bet_info['result'] = win_option
+                # Close the bet
+                bet_info['status'] = 0
+            else:
+                # The result is considered invalid
+                bet_info['result'] = -1
 
-                    # Check the date to set the status. if past
-                    # if current_day > end_day :
-                        # Close the bet
-                        # bet_info['status'] = 0
+                # Check the date to set the status. if past
+                # Convert the string to a datetime object
+                date_end = datetime.strptime(bet_info['end_date'], '%y-%m-%d').replace(tzinfo=timezone.utc)
+                current_utc_date = datetime.now(timezone.utc)
+                if current_utc_date > date_end:
+                    print("Today's UTC date has passed the end date.")
+                    bet_info['status'] = 0
+            print(bet_info)
 
             # Append the active bets
             activeBets[bet_info['bet_id']] = bet_info
+
         return activeBets
 
     def join_bet(self, betInfo):
