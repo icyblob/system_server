@@ -1,4 +1,5 @@
 import ctypes
+from collections import defaultdict
 
 # Define the C++ Quottery struct wrapper
 
@@ -56,7 +57,16 @@ class BetInfoOutput(ctypes.Structure):
         ('minBetAmount', ctypes.c_uint64),
         ('maxBetSlotPerOption', ctypes.c_uint32),
         # how many bet slots have been filled on each option
-        ('currentBetState', ctypes.c_uint32 * 8)
+        ('currentBetState', ctypes.c_uint32 * 8),
+
+        # Voting result
+        ## Vote of each oracle provider chose
+        ## -1 mean invalid
+        ('betResultWonOption', ctypes.c_int8 * 8),
+        ## List of oracle providers that attend to the voting
+        ## -1 mean in valid
+        ('betResultOPId', ctypes.c_int8 * 8)
+
     ]
 
 # Function to fill the array with the ASCII values of the string characters
@@ -81,7 +91,10 @@ class QuotteryCppWrapper:
 
         self.nodeIP = nodeIP
         self.port = port
+
+        # Constant parameters
         self.scheduleTickOffset = 5
+        self.maxNumberOfOracleProvides = 8
 
         # Quottery related
         self.quottery_cpp_func = ctypes.CDLL(libs)
@@ -144,13 +157,89 @@ class QuotteryCppWrapper:
         ]
         self.quottery_cpp_func.quotteryWrapperIssueBet.restype = ctypes.c_int
 
+    def get_bet_info(self, betId):
+        bet_info = {}
+
+         # Access the fields of the struct
+        qt_output_result = BetInfoOutput()
+        sts = self.quottery_cpp_func.quotteryWrapperGetBetInfo(self.nodeIP.encode(
+            'utf-8'), self.port, betId, ctypes.byref(qt_output_result))
+
+        if sts:
+            print('[WARNING] Failed to get info of active bet ID', betId)
+            return bet_info
+
+        bet_info['bet_id'] = betId
+        # Strip the string terminator
+        bet_info['bet_desc'] = bytes(
+            qt_output_result.betDesc).decode('utf-8').strip('\x00')
+        bet_info['no_options'] = qt_output_result.nOption
+
+        identity_buffer = ctypes.create_string_buffer(60)
+        self.quottery_cpp_func.getIdentityFromPublicKeyWrapper(
+            qt_output_result.creator, identity_buffer)
+        bet_info['creator'] = identity_buffer.value.decode('utf-8')
+
+        # Bet fee
+        # TODO: Correct the naming in core
+        # https://github.com/qubic/core/blob/dkat-quottery-sc/src/contracts/Quottery.h#L524
+        bet_info['amount_per_bet_slot'] = qt_output_result.minBetAmount
+
+        # Get the options descriton
+        bet_info['option_desc'] = [''.join(chr(
+            qt_output_result.optionDesc[i + j]).strip('\x00') for j in range(32)) for i in range(0, 256, 32)]
+        bet_info['option_desc'] = [s for s in bet_info['option_desc'] if s]
+
+        bet_info['current_bet_state'] = []
+        for i in range(0, bet_info['no_options']):
+            bet_info['current_bet_state'].append(qt_output_result.currentBetState[i])
+
+        bet_info['max_slot_per_option'] = qt_output_result.maxBetSlotPerOption
+
+        bet_info['open_date'] = f"{qt_output_result.openDate[0]:02}" + '-' + \
+            f"{qt_output_result.openDate[1]:02}" + \
+            '-' + f"{qt_output_result.openDate[2]:02}"
+        bet_info['close_date'] = f"{qt_output_result.closeDate[0]:02}" + '-' + \
+            f"{qt_output_result.closeDate[1]:02}" + \
+            '-' + f"{qt_output_result.closeDate[2]:02}"
+        bet_info['end_date'] = f"{qt_output_result.endDate[0]:02}" + '-' + \
+            f"{qt_output_result.endDate[1]:02}" + \
+            '-' + f"{qt_output_result.endDate[2]:02}"
+
+        # Oracle id and fee. Assume they are follow extract order
+        bet_info['oracle_id'] = []
+        bet_info['oracle_fee'] = []
+        for i in range(0, self.maxNumberOfOracleProvides):
+            # Pack the oracle ID
+            offset = 32 * i
+            oracle_id_public_key = ctypes.cast(ctypes.addressof(
+                qt_output_result.oracleProviderId) + offset, ctypes.POINTER(ctypes.c_uint8))
+            all_zeros = all(value == 0 for value in oracle_id_public_key[:32])
+            # Only add if public key is not fully zeros
+            if not all_zeros:
+                identity_buffer = ctypes.create_string_buffer(60)
+                self.quottery_cpp_func.getIdentityFromPublicKeyWrapper(
+                    oracle_id_public_key, identity_buffer)
+                bet_info['oracle_id'].append(identity_buffer.value.decode('utf-8'))
+
+                # TODO: Check here
+                oracle_fee = ctypes.cast(ctypes.addressof(
+                    qt_output_result.oracleFees) + i * 4, ctypes.POINTER(ctypes.c_uint32))
+                bet_info['oracle_fee'].append(float(oracle_fee[0]) / 100)
+        bet_info['no_ops'] = len(bet_info['oracle_id'])
+
+        # Get the result of the votes
+        bet_info['op_vote_options'] = [i for i in qt_output_result.betResultWonOption]
+        bet_info['op_vote_ids'] = [i for i in qt_output_result.betResultOPId]
+
+        return bet_info
+
     def get_active_bets(self):
 
         # Return bets dictionary
         activeBets ={}
 
         # Get the active bets id
-        qt_output_result = BetInfoOutput()
         arrayPointer = (ctypes.c_uint32 * 1024)()
         numberOfActiveBets = ctypes.c_uint32(0)
         sts = self.quottery_cpp_func.quotteryWrapperGetActiveBet(self.nodeIP.encode(
@@ -160,90 +249,62 @@ class QuotteryCppWrapper:
             return
 
         bets_count = numberOfActiveBets.value
-        print("There are", bets_count, "bets:", arrayPointer[0:bets_count])
+        print("There are", bets_count, "active bets:", arrayPointer[0:bets_count])
 
         # Process each active bet and recording it
         for i in range(0, bets_count):
             bet_id = arrayPointer[i]
 
             # Print the bet for debugging
-            #self.quottery_cpp_func.quotteryWrapperPrintBetInfo(self.nodeIP.encode(
-            #    'utf-8'), self.port, bet_id)
+            # self.quottery_cpp_func.quotteryWrapperPrintBetInfo(self.nodeIP.encode(
+            #     'utf-8'), self.port, bet_id)
 
-            # Access the fields of the struct
-            sts = self.quottery_cpp_func.quotteryWrapperGetBetInfo(self.nodeIP.encode(
-                'utf-8'), self.port, bet_id, ctypes.byref(qt_output_result))
-
-            if sts:
-                print('[WARNING] Failed to get info of bet ID', bet_id)
-                continue
-
-            # Push the result into a list
             bet_info = {}
-            bet_info['bet_id'] = bet_id
-            # Strip the string terminator
-            bet_info['bet_desc'] = bytes(
-                qt_output_result.betDesc).decode('utf-8').strip('\x00')
-            bet_info['no_options'] = qt_output_result.nOption
 
-            identity_buffer = ctypes.create_string_buffer(60)
-            self.quottery_cpp_func.getIdentityFromPublicKeyWrapper(
-                qt_output_result.creator, identity_buffer)
-            bet_info['creator'] = identity_buffer.value.decode('utf-8')
-
-            # Bet fee
-            # TODO: Correct the naming in core
-            # https://github.com/qubic/core/blob/dkat-quottery-sc/src/contracts/Quottery.h#L524
-            bet_info['amount_per_bet_slot'] = qt_output_result.minBetAmount
-
-            # Get the options descriton
-            bet_info['option_desc'] = [''.join(chr(
-                qt_output_result.optionDesc[i + j]).strip('\x00') for j in range(32)) for i in range(0, 256, 32)]
-            bet_info['option_desc'] = [s for s in bet_info['option_desc'] if s]
-
-            bet_info['current_bet_state'] = []
-            for i in range(0, bet_info['no_options']):
-                bet_info['current_bet_state'].append(qt_output_result.currentBetState[i])
-
-            bet_info['max_slot_per_option'] = qt_output_result.maxBetSlotPerOption
-
-            bet_info['open_date'] = f"{qt_output_result.openDate[0]:02}" + '-' + \
-                f"{qt_output_result.openDate[1]:02}" + \
-                '-' + f"{qt_output_result.openDate[2]:02}"
-            bet_info['close_date'] = f"{qt_output_result.closeDate[0]:02}" + '-' + \
-                f"{qt_output_result.closeDate[1]:02}" + \
-                '-' + f"{qt_output_result.closeDate[2]:02}"
-            bet_info['end_date'] = f"{qt_output_result.endDate[0]:02}" + '-' + \
-                f"{qt_output_result.endDate[1]:02}" + \
-                '-' + f"{qt_output_result.endDate[2]:02}"
-
-            # Oracle id and fee. Assume they are follow extract order
-            bet_info['oracle_id'] = []
-            bet_info['oracle_fee'] = []
-            for i in range(0, 8):
-                # Pack the oracle ID
-                offset = 32 * i
-                oracle_id_public_key = ctypes.cast(ctypes.addressof(
-                    qt_output_result.oracleProviderId) + offset, ctypes.POINTER(ctypes.c_uint8))
-                all_zeros = all(value == 0 for value in oracle_id_public_key[:32])
-                # Only add if public key is not fully zeros
-                if not all_zeros:
-                    identity_buffer = ctypes.create_string_buffer(60)
-                    self.quottery_cpp_func.getIdentityFromPublicKeyWrapper(
-                        oracle_id_public_key, identity_buffer)
-                    bet_info['oracle_id'].append(identity_buffer.value.decode('utf-8'))
-
-                    # TODO: Check here
-                    oracle_fee = ctypes.cast(ctypes.addressof(
-                        qt_output_result.oracleFees) + i * 4, ctypes.POINTER(ctypes.c_uint32))
-                    bet_info['oracle_fee'].append(float(oracle_fee[0]) / 100)
-            bet_info['no_ops'] = len(bet_info['oracle_id'])
-
-            # Active status
+            # Active status. Default is active
+            # Inactive bet is an bet that
+            # - Past the closed date (can not join anymore)
+            # - Bet that have the final result
             bet_info['status'] = 1
 
-            # Result
-            bet_info['result'] = 'none'
+            # Mark the bet as invalid result
+            bet_info['result'] = -1
+
+            # Access the fields of the struct
+            bet_info = self.get_bet_info(bet_id)
+
+            # Get the result bet and also set the current date
+            required_votes = bet_info['no_ops'] * 2 /  3
+            win_option = -1
+            op_voted_count = 0
+            vote_count = defaultdict(int)
+            if len(bet_info['op_vote_options']) == self.maxNumberOfOracleProvides and len(bet_info['op_vote_ids']) == self.maxNumberOfOracleProvides:
+                op_vote_options = bet_info['op_vote_options']
+                op_vote_ids = bet_info['op_vote_ids']
+                for i in range(0, self.maxNumberOfOracleProvides):
+                    if op_vote_ids[i] > -1 and op_vote_options[i] > -1:
+                        vote_count[op_vote_options[i]] += 1
+                        op_voted_count += 1
+                # Decide the win option
+                ## Find the key with the max value
+                key_with_max_votes = max(vote_count, key=vote_count.get)
+                dominated_votes = vote_count[key_with_max_votes]
+
+                ## Check the win condition
+                ## If the dominated votes are satisfied the win conditions (>= 2/3 total of OPs)
+                if dominated_votes >= required_votes:
+                    win_option = key_with_max_votes
+                    bet_info['result'] = win_option
+                    # Close the bet
+                    bet_info['status'] = 0
+                else:
+                    # The result is considered invalid
+                    bet_info['result'] = -1
+
+                    # Check the date to set the status. if past
+                    # if current_day > end_day :
+                        # Close the bet
+                        # bet_info['status'] = 0
 
             # Append the active bets
             activeBets[bet_info['bet_id']] = bet_info

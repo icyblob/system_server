@@ -23,6 +23,10 @@ struct BetInfoOutput
     uint64_t minBetAmount;
     uint32_t maxBetSlotPerOption;
     uint32_t currentBetState[8]; // how many bet slots have been filled on each option
+
+    // Voting result
+    int8_t betResultWonOption[8];
+    int8_t betResultOPId[8];
 };
 
 struct QuotteryissueBetInput

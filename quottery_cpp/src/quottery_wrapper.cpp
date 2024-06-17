@@ -78,6 +78,9 @@ int quotteryWrapperGetBetInfo(
     result.maxBetSlotPerOption = betOutput.maxBetSlotPerOption;
     std::copy(betOutput.currentBetState, betOutput.currentBetState + 8, result.currentBetState);
 
+    // Result if there is any
+    std::copy(betOutput.betResultOPId, betOutput.betResultOPId + 8, result.betResultOPId);
+    std::copy(betOutput.betResultWonOption, betOutput.betResultWonOption + 8, result.betResultWonOption);
     return 0;
 }
 
