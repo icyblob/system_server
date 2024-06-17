@@ -168,7 +168,7 @@ class QuotteryCppWrapper:
 
         if sts:
             print('[WARNING] Failed to get info of active bet ID', betId)
-            return bet_info
+            return (sts, bet_info)
 
         bet_info['bet_id'] = betId
         # Strip the string terminator
@@ -238,10 +238,10 @@ class QuotteryCppWrapper:
         for i in range(0, self.maxNumberOfOracleProvides):
             op_vote_option = qt_output_result.betResultWonOption[i]
             op_vote_id = qt_output_result.betResultOPId[i]
-            if op_vote_option > 0 and op_vote_id > 0:
+            if op_vote_option >= 0 and op_vote_id >= 0:
                 bet_info['oracle_vote'][op_vote_id] = op_vote_option
 
-        return bet_info
+        return (0, bet_info)
 
     def get_active_bets(self):
 
@@ -255,14 +255,17 @@ class QuotteryCppWrapper:
             'utf-8'), self.port, ctypes.pointer(numberOfActiveBets), arrayPointer)
         if sts:
             print('Get active bets failed!')
-            return
+            return (sts, activeBets)
 
         bets_count = numberOfActiveBets.value
-        print("There are", bets_count, "active bets:", arrayPointer[0:bets_count])
+        print("There are", bets_count, "bets:", arrayPointer[0:bets_count])
 
         # Process each active bet and recording it
         for i in range(0, bets_count):
             bet_id = arrayPointer[i]
+
+            # The bet is inactive. Init it with an empty bet info
+            activeBets[bet_id] = {}
 
             # Print the bet for debugging
             # self.quottery_cpp_func.quotteryWrapperPrintBetInfo(self.nodeIP.encode(
@@ -270,22 +273,16 @@ class QuotteryCppWrapper:
 
             bet_info = {}
 
-            # Active status. Default is active
-            # Inactive bet is an bet that
-            # - Past the closed date (can not join anymore)
-            # - Bet that have the final result
-            bet_info['status'] = 1
-
-            # Mark the bet as invalid result
-            bet_info['result'] = -1
-
             # Access the fields of the struct
-            bet_info = self.get_bet_info(bet_id)
+            bet_info_sts, bet_info = self.get_bet_info(bet_id)
+            # The bet info is failed. Save the last error and process the next one
+            if bet_info_sts :
+                sts = bet_info_sts
+                continue
 
             # Get the result bet and also set the current date
             number_of_oracle_operators = bet_info['no_ops']
             required_votes = number_of_oracle_operators * 2 /  3
-            win_option = -1
             op_voted_count = 0
             dominated_votes = 0
             vote_count = defaultdict(int)
@@ -300,30 +297,18 @@ class QuotteryCppWrapper:
                 key_with_max_votes = max(vote_count, key=vote_count.get)
                 dominated_votes = vote_count[key_with_max_votes]
 
-            ## Check the win condition
+            ## Check the win condition. This check is replicating the decision in node
             ## If the dominated votes are satisfied the win conditions (>= 2/3 total of OPs)
             if dominated_votes >= required_votes:
-                win_option = key_with_max_votes
-                bet_info['result'] = win_option
-                # Close the bet
-                bet_info['status'] = 0
+                bet_info['result'] = key_with_max_votes
             else:
                 # The result is considered invalid
                 bet_info['result'] = -1
 
-                # Check the date to set the status. if past
-                # Convert the string to a datetime object
-                date_end = datetime.strptime(bet_info['end_date'], '%y-%m-%d').replace(tzinfo=timezone.utc)
-                current_utc_date = datetime.now(timezone.utc)
-                if current_utc_date > date_end:
-                    print("Today's UTC date has passed the end date.")
-                    bet_info['status'] = 0
-            print(bet_info)
-
             # Append the active bets
             activeBets[bet_info['bet_id']] = bet_info
 
-        return activeBets
+        return (sts, activeBets)
 
     def join_bet(self, betInfo):
         # Transaction related

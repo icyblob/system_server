@@ -66,10 +66,9 @@ def init_db():
 
 def fetch_active_bets_from_node():
     # Connect to the node and get current active bets
-    # TODO: Process the disconnected issue
     try:
-        active_bets = qt.get_active_bets()
-        return active_bets
+        sts, active_bets = qt.get_active_bets()
+        return (sts, active_bets)
     except Exception as e:
         print(f"Error fetching active bets from node: {e}")
         return {}
@@ -77,8 +76,8 @@ def fetch_active_bets_from_node():
 
 def get_bet_info_from_node(betId):
     try:
-        betInfo = qt.get_bet_info(betId)
-        return betInfo
+        sts, betInfo = qt.get_bet_info(betId)
+        return (sts, betInfo)
     except Exception as e:
         print(f"Error fetching active bets from node: {e}")
         return []
@@ -172,7 +171,7 @@ def update_betting_odds(conn, bet_id):
 def update_database_with_active_bets():
     while True:
         try:
-            active_bets = fetch_active_bets_from_node()
+            sts, active_bets = fetch_active_bets_from_node()
 
             # Verify the active_bets
             if not active_bets:
@@ -192,67 +191,79 @@ def update_database_with_active_bets():
             conn = sqlite3.connect(DATABASE_FILE)
             cursor = conn.cursor()
             for key, active_bet in active_bets.items():
-                active_bet_ids.append(active_bet['bet_id'])
-                cursor.execute('''
-                    INSERT OR REPLACE INTO quottery_info (
-                                bet_id,
-                                no_options,
-                                creator,
-                                bet_desc,
-                                option_desc,
-                                current_bet_state,
-                                max_slot_per_option,
-                                amount_per_bet_slot,
-                                open_date,
-                                close_date,
-                                end_date,
-                                result,
-                                no_ops,
-                                oracle_id,
-                                oracle_fee,
-                                oracle_vote,
-                                status,
-                                current_num_selection,
-                                current_total_qus,
-                                betting_odds)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ''', (
-                    active_bet['bet_id'],
-                    active_bet['no_options'],
-                    active_bet['creator'],
-                    active_bet['bet_desc'],
-                    json.dumps(active_bet['option_desc']),  # This should be a separate table
-                    json.dumps(active_bet['current_bet_state']),
-                    active_bet['max_slot_per_option'],
-                    active_bet['amount_per_bet_slot'],
-                    active_bet['open_date'],
-                    active_bet['close_date'],
-                    active_bet['end_date'],
-                    active_bet['result'],
-                    active_bet['no_ops'],
-                    json.dumps(active_bet['oracle_id']),  # This should be a separate table
-                    json.dumps(active_bet['oracle_fee']),  # This should be a separate table
-                    json.dumps(active_bet['oracle_vote']),  # This should be a separate table
-                    1,
-                    json.dumps(active_bet['current_bet_state']),
-                    '0',
-                    json.dumps(['1'] * active_bet['no_options']),
-                ))
+                active_bet_ids.append(key)
+                # Update the database if the bet info is valid
+                if active_bet:
+                    # Check the bet from node is inactive
+                    ## Result checking
+                    bet_status = 1
+                    if active_bet['result'] >= 0:
+                        bet_status = 0
+                    else: ## Datetime checking
+                        ### Convert the string to a datetime object
+                        date_end = datetime.strptime(active_bet['end_date'], '%y-%m-%d').replace(tzinfo=timezone.utc)
+                        current_utc_date = datetime.now(timezone.utc)
+                        if current_utc_date > date_end:
+                            bet_status = 0
+                    cursor.execute('''
+                        INSERT OR REPLACE INTO quottery_info (
+                                    bet_id,
+                                    no_options,
+                                    creator,
+                                    bet_desc,
+                                    option_desc,
+                                    current_bet_state,
+                                    max_slot_per_option,
+                                    amount_per_bet_slot,
+                                    open_date,
+                                    close_date,
+                                    end_date,
+                                    result,
+                                    no_ops,
+                                    oracle_id,
+                                    oracle_fee,
+                                    oracle_vote,
+                                    status,
+                                    current_num_selection,
+                                    current_total_qus,
+                                    betting_odds)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ''', (
+                        active_bet['bet_id'],
+                        active_bet['no_options'],
+                        active_bet['creator'],
+                        active_bet['bet_desc'],
+                        json.dumps(active_bet['option_desc']),  # This should be a separate table
+                        json.dumps(active_bet['current_bet_state']),
+                        active_bet['max_slot_per_option'],
+                        active_bet['amount_per_bet_slot'],
+                        active_bet['open_date'],
+                        active_bet['close_date'],
+                        active_bet['end_date'],
+                        active_bet['result'],
+                        active_bet['no_ops'],
+                        json.dumps(active_bet['oracle_id']),  # This should be a separate table
+                        json.dumps(active_bet['oracle_fee']),  # This should be a separate table
+                        json.dumps(active_bet['oracle_vote']),  # This should be a separate table
+                        bet_status,
+                        json.dumps(active_bet['current_bet_state']),
+                        '0',
+                        json.dumps(['1'] * active_bet['no_options']),
+                    ))
+                    update_betting_odds(conn, key)
+                    update_current_total_qus(conn, key)
+
 
             inactive_bet_ids = set(db_bet_ids) - set(active_bet_ids)
-
             # Mark the old bet status as 0
             update_statement = 'UPDATE quottery_info SET status = 0 WHERE bet_id IN ({});'.format(
                 ','.join('?' for _ in inactive_bet_ids))
             cursor.execute(update_statement, list(inactive_bet_ids))
 
-            for bet_id in active_bet_ids:
-                update_betting_odds(conn, bet_id)
-                update_current_total_qus(conn, bet_id)
 
             conn.commit()
             conn.close()
         except Exception as e:
-            print(f"Error updating database: {e}")
+           print(f"Error updating database: {e}")
         finally:
             time.sleep(UPDATE_INTERVAL)  # Wait for 3 seconds before the next update
 

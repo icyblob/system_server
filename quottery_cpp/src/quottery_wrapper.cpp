@@ -142,10 +142,9 @@ int quotteryWrapperIssueBet(
     betInput.amountPerSlot = betInfo.amountPerSlot;
     betInput.maxBetSlotPerOption = betInfo.maxBetSlotPerOption;
     betInput.numberOfOption = betInfo.numberOfOption;
-
     try
     {
-        quotterySubmitIssueBet(nodeIp, nodePort, seed, betInput, scheduledTickOffset, txHash, &txTick);
+        quotteryIssueBet(nodeIp, nodePort, seed, scheduledTickOffset, &betInput, txHash, &txTick);
     }
     catch(const std::exception& e)
     {
