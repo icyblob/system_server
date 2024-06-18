@@ -42,6 +42,29 @@ struct QuotteryissueBetInput
     uint32_t numberOfOption;
 };
 
+struct QuotteryBasicInfoOutput
+{
+    uint64_t feePerSlotPerDay; // Amount of qus
+    uint64_t gameOperatorFee; // 4 digit number ABCD means AB.CD% | 1234 is 12.34%
+    uint64_t shareholderFee; // 4 digit number ABCD means AB.CD% | 1234 is 12.34%
+    uint64_t minBetSlotAmount; // amount of qus
+    uint64_t burnFee; // percentage
+    uint64_t nIssuedBet; // number of issued bet
+    uint64_t moneyFlow;
+    uint64_t moneyFlowThroughIssueBet;
+    uint64_t moneyFlowThroughJoinBet;
+    uint64_t moneyFlowThroughFinalizeBet;
+    uint64_t earnedAmountForShareHolder;
+    uint64_t paidAmountForShareHolder;
+    uint64_t earnedAmountForBetWinner;
+    uint64_t distributedAmount;
+    uint64_t burnedAmount;
+    uint8_t gameOperator[32];
+};
+
+// Get quottery basic information
+int quotteryWrapperGetBasicInfo(const char* nodeIp, const int nodePort, QuotteryBasicInfoOutput& result);
+
 // Get a list of current active bet IDs
 int quotteryWrapperGetActiveBet(
     const char* nodeIp,

@@ -64,6 +64,14 @@ def init_db():
     conn.commit()
     conn.close()
 
+def get_qtry_basic_info_from_node():
+    # Connect to the node and get current basic info of qtry
+    try:
+        sts, qtry_basic_info = qt.get_qtry_basic_info()
+        return (sts, qtry_basic_info)
+    except Exception as e:
+        print(f"Error get active basic info of qtry from node: {e}")
+        return {}
 
 def fetch_active_bets_from_node():
     # Connect to the node and get current active bets
@@ -172,6 +180,9 @@ def update_betting_odds(conn, bet_id):
 def update_database_with_active_bets():
     while True:
         try:
+
+            sts, qt_basic_info = get_qtry_basic_info_from_node()
+
             sts, active_bets = fetch_active_bets_from_node()
 
             # Verify the active_bets

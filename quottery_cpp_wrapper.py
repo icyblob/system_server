@@ -68,6 +68,26 @@ class BetInfoOutput(ctypes.Structure):
 
     ]
 
+class QtryBasicInfoOutput(ctypes.Structure):
+    _fields_ = [
+    ('feePerSlotPerDay', ctypes.c_uint64),  # Amount of qus
+    ('gameOperatorFee', ctypes.c_uint64),  # 4 digit number ABCD means AB.CD% | 1234 is 12.34%
+    ('shareholderFee', ctypes.c_uint64),   # 4 digit number ABCD means AB.CD% | 1234 is 12.34%
+    ('minBetSlotAmount', ctypes.c_uint64), # amount of qus
+    ('burnFee', ctypes.c_uint64),          # percentage
+    ('nIssuedBet', ctypes.c_uint64),       # number of issued bet
+    ('moneyFlow', ctypes.c_uint64),
+    ('moneyFlowThroughIssueBet', ctypes.c_uint64),
+    ('moneyFlowThroughJoinBet', ctypes.c_uint64),
+    ('moneyFlowThroughFinalizeBet', ctypes.c_uint64),
+    ('earnedAmountForShareHolder', ctypes.c_uint64),
+    ('paidAmountForShareHolder', ctypes.c_uint64),
+    ('earnedAmountForBetWinner', ctypes.c_uint64),
+    ('distributedAmount', ctypes.c_uint64),
+    ('burnedAmount', ctypes.c_uint64),
+    ('gameOperator', ctypes.c_uint8 * 32)
+    ]
+
 # Function to fill the array with the ASCII values of the string characters
 def fill_array_from_string(ctypes_array, string, start_index):
     for i, char in enumerate(string):
@@ -107,6 +127,11 @@ class QuotteryCppWrapper:
         self.quottery_cpp_func.getIdentityFromPublicKeyWrapper.argtypes = [
             ctypes.POINTER(ctypes.c_uint8), ctypes.c_char_p]
         self.quottery_cpp_func.getIdentityFromPublicKeyWrapper.restype = ctypes.c_int
+
+        # Quottery basic information
+        self.quottery_cpp_func.quotteryWrapperGetBasicInfo.argtypes = [
+            ctypes.c_char_p, ctypes.c_int, ctypes.POINTER(QtryBasicInfoOutput)]
+        self.quottery_cpp_func.quotteryWrapperGetBasicInfo.restype = ctypes.c_int
 
         # Print the bet infomation
         self.quottery_cpp_func.quotteryWrapperPrintBetInfo.argtypes = [
@@ -155,6 +180,40 @@ class QuotteryCppWrapper:
             ctypes.POINTER(ctypes.c_uint32)
         ]
         self.quottery_cpp_func.quotteryWrapperIssueBet.restype = ctypes.c_int
+
+    def get_qtry_basic_info(self):
+        basic_info = {}
+        qt_basic_info = QtryBasicInfoOutput()
+        sts = self.quottery_cpp_func.quotteryWrapperGetBasicInfo(self.nodeIP.encode(
+            'utf-8'), self.port, ctypes.byref(qt_basic_info))
+
+        if sts :
+            print('[WARNING] Failed to get qtry basic info')
+            return (sts, basic_info)
+
+        # Fill the data in dictionary
+        basic_info['fee_per_slot_per_day'] = qt_basic_info.feePerSlotPerDay
+        basic_info['game_operator_fee'] = qt_basic_info.gameOperatorFee / 100
+        basic_info['share_holder_fee'] = qt_basic_info.shareholderFee / 100
+        basic_info['min_bet_slot_amount'] = qt_basic_info.minBetSlotAmount
+        basic_info['burn_fee'] = qt_basic_info.burnFee / 100
+        basic_info['n_issued_bet'] = qt_basic_info.nIssuedBet
+        basic_info['money_flow'] = qt_basic_info.moneyFlow
+        basic_info['money_flow_through_issue_bet'] = qt_basic_info.moneyFlowThroughIssueBet
+        basic_info['money_flow_through_join_bet'] = qt_basic_info.moneyFlowThroughJoinBet
+        basic_info['money_flow_through_finalize_bet'] = qt_basic_info.moneyFlowThroughFinalizeBet
+        basic_info['earned_amount_for_share_holder'] = qt_basic_info.earnedAmountForShareHolder
+        basic_info['paid_amount_for_share_holder'] = qt_basic_info.paidAmountForShareHolder
+        basic_info['earned_amount_for_bet_winner'] = qt_basic_info.earnedAmountForBetWinner
+        basic_info['distributed_amount'] = qt_basic_info.distributedAmount
+        basic_info['burned_amount'] = qt_basic_info.burnedAmount
+
+        identity_buffer = ctypes.create_string_buffer(60)
+        self.quottery_cpp_func.getIdentityFromPublicKeyWrapper(
+            qt_basic_info.gameOperator, identity_buffer)
+        basic_info['game_operator']= identity_buffer.value.decode('utf-8')
+
+        return sts, basic_info
 
     def get_bet_info(self, betId):
         bet_info = {}
