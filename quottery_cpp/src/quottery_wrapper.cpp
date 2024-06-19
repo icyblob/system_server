@@ -5,6 +5,44 @@
 #include <keyUtils.h>
 #include <quottery.h>
 
+int quotteryWrapperGetBasicInfo(const char* nodeIp, const int nodePort, QuotteryBasicInfoOutput& result)
+{
+    // Get the inform with standard api
+    qtryBasicInfo_output basicInfo;
+    try
+    {
+        quotteryGetBasicInfo(nodeIp, nodePort, basicInfo);
+    }
+    catch(const std::exception& e)
+    {
+        std::cerr << e.what() << '\n';
+        return 1;
+    }
+
+    // Print for debug
+    // quotteryPrintBasicInfo(nodeIp, nodePort);
+
+    // Fill the external struct
+    result.feePerSlotPerDay = basicInfo.feePerSlotPerDay;
+    result.gameOperatorFee = basicInfo.gameOperatorFee;
+    result.shareholderFee = basicInfo.shareholderFee;
+    result.minBetSlotAmount = basicInfo.minBetSlotAmount;
+    result.burnFee = basicInfo.burnFee;
+    result.nIssuedBet = basicInfo.nIssuedBet;
+    result.moneyFlow = basicInfo.moneyFlow;
+    result.moneyFlowThroughIssueBet = basicInfo.moneyFlowThroughIssueBet;
+    result.moneyFlowThroughJoinBet = basicInfo.moneyFlowThroughJoinBet;
+    result.moneyFlowThroughFinalizeBet = basicInfo.moneyFlowThroughFinalizeBet;
+    result.earnedAmountForShareHolder = basicInfo.earnedAmountForShareHolder;
+    result.paidAmountForShareHolder = basicInfo.paidAmountForShareHolder;
+    result.earnedAmountForBetWinner = basicInfo.earnedAmountForBetWinner;
+    result.distributedAmount = basicInfo.distributedAmount;
+    result.burnedAmount = basicInfo.burnedAmount;
+    std::copy(basicInfo.gameOperator, basicInfo.gameOperator + 32, result.gameOperator);
+
+    return 0;
+}
+
 int quotteryWrapperGetActiveBet(
     const char* nodeIp,
     const int nodePort,
