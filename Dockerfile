@@ -1,5 +1,5 @@
 # Use the official Ubuntu 20.04 image as the base image
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 # Set environment variables to avoid user prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive

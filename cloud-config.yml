@@ -1,0 +1,48 @@
+#cloud-config
+# Update package sources and upgrade packages
+package_update: true
+package_upgrade: true
+
+# Install necessary packages
+packages:
+  - docker.io
+  - docker-compose
+  - git
+
+# Ensure Docker service is started and enabled
+runcmd:
+  - systemctl start docker
+  - systemctl enable docker
+
+# Clone the GitHub repository
+runcmd:
+  - git clone https://github.com/icyblob/system_server /root/system_server
+
+# Copy your SSL certificate and key (Ensure these are correctly set)
+write_files:
+  - path: /root/system_server/certificate.crt
+    content: |
+      -----BEGIN CERTIFICATE-----
+      # Your certificate content
+      -----END CERTIFICATE-----
+
+  - path: /root/system_server/private.key
+    content: |
+      -----BEGIN PRIVATE KEY-----
+      # Your private key content
+      -----END PRIVATE KEY-----
+
+  - path: /root/system_server/.env
+    content: |
+      CERT_PATH=/app/certificate.crt
+      CERT_KEY_PATH=/app/private.key
+
+# Run commands to build and run Docker containers
+runcmd:
+  - cd /root/system_server
+  - docker-compose up --build -d
+
+# Output to the console
+output:
+  all: "| tee -a /var/log/cloud-init-output.log"
+  

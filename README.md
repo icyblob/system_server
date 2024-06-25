@@ -22,7 +22,17 @@ docker build -t flask-app .
 
 - Run the docker container
 ```commandline
-docker run -d -p 5000:5000 --name flask-app-container flask-app
+docker run -d -p 5000:5000 -v ${HOST_SERVER_KEY_LOCATION}:${DOCKER_KEY_LOCATION} -e CERT_PATH=${CERT_PATH} -e CERT_KEY_PATH=${CERT_KEY_PATH} --name flask-app-container flask-app
+```
+
+- HOST_SERVER_KEY_LOCATION : path to crt and private file on host
+- DOCKER_KEY_LOCATION : path to crt and private file in Docker container
+- CERT_PATH : full path to the certification in Docker container
+- CERT_KEY_PATH: full path to private key in Docker container
+
+Example:
+```
+docker run -d -p 5000:5000 -v /etc/key_here:/etc/docker_key_here -e CERT_PATH=/etc/docker_key_here/certificate.crt -e CERT_KEY_PATH=/etc/docker_key_here/private.key --name flask-app-container flask-app
 ```
 
 # How to build on local machine
@@ -57,6 +67,15 @@ After this a **quottery_cpp** library will be install into ../libs/quottery_cpp
 
 ## Setting
 
+### Config the SSL certification
+Setting 2 environment point to crt and key location
+
+```
+CERT_PATH=
+KEY_PATH=
+```
+
+### Set the connection to a node
 In app.py modify below value pointing to the node server
 
 ```
@@ -75,7 +94,7 @@ python3 app.py
 You can delete the **database.db** to get a fresh version of quottery information
 
 ### Test the loading data
-Open http://127.0.0.1:5000/get_active_bets
+Open https://127.0.0.1:5000/get_active_bets
 
 # Troubleshoot
 

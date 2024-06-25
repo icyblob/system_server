@@ -448,4 +448,7 @@ if __name__ == '__main__':
     update_quottery_info_thread.daemon = True
     update_quottery_info_thread.start()
 
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Insert the ssl crt and key here
+    ssl_context = (os.getenv('CERT_PATH'), os.getenv('CERT_KEY_PATH'))
+
+    app.run(host='0.0.0.0', port=5000, debug=False, ssl_context=ssl_context)
