@@ -6,7 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install Python 3, pip, cmake, and other dependencies
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip cmake build-essential && \
+    apt-get install -y python3 python3-pip cmake build-essential git && \
     apt-get clean
 
 # Set environment variables
@@ -24,6 +24,9 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code
 COPY . /app/
+
+# Initialize and update git submodules
+RUN git submodule update --init --recursive
 
 # Build and install the C++ project
 RUN [ -d build ] && rm -rf build || true && \
