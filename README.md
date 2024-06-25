@@ -13,7 +13,19 @@ This CMake project will use function implement in **submodule/qubic-cli** and cr
 
 It try to replicate what qubic-cli handle the quoterry
 
-# How to build
+# How to build with Docker
+
+- Run
+```commandline
+docker build -t flask-app .
+```
+
+- Run the docker container
+```commandline
+docker run -d -p 5000:5000 --name flask-app-container flask-app
+```
+
+# How to build on local machine
 
 ## Requirement
 
@@ -64,3 +76,16 @@ You can delete the **database.db** to get a fresh version of quottery informatio
 
 ### Test the loading data
 Open http://127.0.0.1:5000/get_active_bets
+
+# Troubleshoot
+
+- Enable UFW (if not already enabled)
+```commandline
+sudo ufw enable
+sudo ufw allow 5000
+```
+
+Check UFW status
+```commandline
+sudo ufw status
+```
