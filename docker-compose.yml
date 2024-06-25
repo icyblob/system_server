@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  flask-app:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+    environment:
+      - FLASK_ENV=development
+      - CERT_PATH=/app/certificate.crt
+      - CERT_KEY_PATH=/app/private.key
+    command: ["python3", "app.py"]
