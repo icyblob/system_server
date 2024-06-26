@@ -453,6 +453,7 @@ if __name__ == '__main__':
     parser.add_argument('-appport', type=int, default=5000, help='The port of this app')
     parser.add_argument('-nodeip', type=str, default=DEFAULT_NODE_IP, help='Node IP address')
     parser.add_argument('-nodeport', type=int, default=DEFAULT_NODE_PORT, help='Node port number')
+    parser.add_argument('-dbpath', type=str, default='.', help='Directory contain the database file')
     parser.add_argument('-debug', action='store_true', help='Enable debug mode (default: False)')
 
     # Execute the parse_args() method
@@ -463,9 +464,12 @@ if __name__ == '__main__':
     APP_PORT = args.appport
     NODE_IP = args.nodeip
     NODE_PORT = args.nodeport
+    DATABASE_PATH = args.dbpath
+    DATABASE_FILE = os.path.join(DATABASE_PATH, DATABASE_FILE)
     print("Launch the app with configurations")
     print(f"- App port: {APP_PORT}")
     print(f"- Node address: {NODE_IP}:{NODE_PORT}")
+    print(f"- Database file: {DATABASE_FILE}")
     print(f"- Qtry path: {QUOTTERY_LIBS}")
     print(f"- Debug mode: {DEBUG_MODE}")
 

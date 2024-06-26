@@ -6,9 +6,10 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - .:/app
+      # Mount the current folder as folder for saving database. You can change to other path on your favor
+      - .:/database
     environment:
       - FLASK_ENV=production
       - CERT_PATH=/app/certificate.crt
       - CERT_KEY_PATH=/app/private.key
-    command: ["python3", "app.py"]
+    command: ["python3", "app.py", "-dbpath", "/database"]
