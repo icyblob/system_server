@@ -1,4 +1,5 @@
 import os
+import sys
 import sqlite3
 import json
 import quottery_cpp_wrapper
@@ -465,9 +466,13 @@ if __name__ == '__main__':
     print("Launch the app with configurations")
     print(f"- App port: {APP_PORT}")
     print(f"- Node address: {NODE_IP}:{NODE_PORT}")
+    print(f"- Qtry path: {QUOTTERY_LIBS}")
     print(f"- Debug mode: {DEBUG_MODE}")
 
-
+    # Check if the qtry wrapper exists and init the qtry wrapper
+    if not os.path.isfile(QUOTTERY_LIBS):
+        print(f"quottery_cpp_wrapper path NOT FOUND: {QUOTTERY_LIBS}. Exiting.")
+        sys.exit(1)
     qt = quottery_cpp_wrapper.QuotteryCppWrapper(QUOTTERY_LIBS, NODE_IP, NODE_PORT)
 
     init_db()
