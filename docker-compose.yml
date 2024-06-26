@@ -4,11 +4,22 @@ services:
   flask-app:
     build: .
     ports:
+        # Change the port if neccessary
       - "5000:5000"
     volumes:
-      - .:/app
+        # Mount the current folder as folder for saving database. You can change to other path on your favor
+      - .:/database
+      - .:/cert
     environment:
-      - FLASK_ENV=development
-      - CERT_PATH=/app/certificate.crt
-      - CERT_KEY_PATH=/app/private.key
-    command: ["python3", "app.py"]
+      - FLASK_ENV=production
+      - CERT_PATH=/cert/qtry.crt # replace your crt here make sure
+      - CERT_KEY_PATH=/cert/qtry.key  # replace your key here make sure
+    # Additional command is
+    # options:
+    #-h, --help          show this help message and exit
+    #-appport APPPORT    The port of this app
+    #-nodeip NODEIP      Node IP address
+    #-nodeport NODEPORT  Node port number
+    #-dbpath DBPATH      Directory contain the database file
+    #-debug              Enable debug mode (default: False)
+    command: ["python3", "app.py", "-dbpath", "/database"]

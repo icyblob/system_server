@@ -1,13 +1,37 @@
-# Use the official Ubuntu 20.04 image as the base image
-FROM ubuntu:22.04
+ARG base_image="ubuntu:22.04"
+ARG image_type="release"
+ARG package_location=""
 
 # Set environment variables to avoid user prompts during installation
-ENV DEBIAN_FRONTEND=noninteractive
+ARG DEBIAN_FRONTEND=noninteractive
+
+#********************Setup an runtime environment for running.
+# If this scale up, we will switch to dual images
+FROM ${base_image} as build_image_runtime
+ARG DEBIAN_FRONTEND
+ARG package_location
 
 # Install Python 3, pip, cmake, and other dependencies
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip cmake build-essential git && \
+    apt-get install -y python3 python3-pip && \
     apt-get clean
+
+#********************Setup an develop environment for building.
+# If this scale up, we will switch to dual images
+FROM ${base_image} as build_image_develop
+ARG DEBIAN_FRONTEND
+ARG package_location
+
+# Install Python 3, pip, cmake, and other dependencies
+RUN apt-get update && \
+    apt-get install -y cmake build-essential && \
+    apt-get clean
+
+#********************Package
+FROM ${base_image} as build_image_release
+ARG DEBIAN_FRONTEND
+ARG APP_DEPENDENCIES
+ARG package_location
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -17,26 +41,17 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # Copy the requirements.txt file
-COPY requirements.txt /app/
+COPY ${package_location}/* /app/
 
 # Install the required Python packages
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the application code
-COPY . /app/
-
-# Initialize and update git submodules
-RUN git submodule update --init --recursive
-
-# Build and install the C++ project
-RUN [ -d build ] && rm -rf build || true && \
-    mkdir build && \
-    cd build && \
-    cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../libs/quottery_cpp && \
-    make install
-
 # Expose the port that the Flask app runs on
 EXPOSE 5000
 
-# Command to run the Flask app
-CMD ["python3", "app.py"]
+# Place holder to trigger above build
+FROM build_image_${image_type}
+ARG DEBIAN_FRONTEND
+ARG APP_DEPENDENCIES
+ARG CMD_BUILD
+ARG package_location
