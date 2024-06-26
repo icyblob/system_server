@@ -7,16 +7,18 @@ from flask import Flask, request, jsonify
 from threading import Thread
 import time
 from datetime import datetime, timezone
+import argparse
 
 app = Flask(__name__)
 CORS(app)
 
+DEBUG_MODE = False
 # IP to an active node
-NODE_IP = '5.199.134.150'
-NODE_PORT = 31844
+DEFAULT_NODE_IP = '5.199.134.150'
+DEFAULT_NODE_PORT = 31844
 
 QUOTTERY_LIBS = 'libs/quottery_cpp/lib/libquottery_cpp.so'
-qt = quottery_cpp_wrapper.QuotteryCppWrapper(QUOTTERY_LIBS, NODE_IP, NODE_PORT)
+qt = None
 
 DATABASE_FILE = 'database.db'
 UPDATE_INTERVAL = 3  # seconds
@@ -443,6 +445,31 @@ def add_bet():
 
 
 if __name__ == '__main__':
+    # Create the parser
+    parser = argparse.ArgumentParser(description='System server for qtry.')
+
+    # Arguments
+    parser.add_argument('-appport', type=int, default=5000, help='The port of this app')
+    parser.add_argument('-nodeip', type=str, default=DEFAULT_NODE_IP, help='Node IP address')
+    parser.add_argument('-nodeport', type=int, default=DEFAULT_NODE_PORT, help='Node port number')
+    parser.add_argument('-debug', action='store_true', help='Enable debug mode (default: False)')
+
+    # Execute the parse_args() method
+    args = parser.parse_args()
+
+    # Access the arguments
+    DEBUG_MODE = args.debug
+    APP_PORT = args.appport
+    NODE_IP = args.nodeip
+    NODE_PORT = args.nodeport
+    print("Launch the app with configurations")
+    print(f"- App port: {APP_PORT}")
+    print(f"- Node address: {NODE_IP}:{NODE_PORT}")
+    print(f"- Debug mode: {DEBUG_MODE}")
+
+
+    qt = quottery_cpp_wrapper.QuotteryCppWrapper(QUOTTERY_LIBS, NODE_IP, NODE_PORT)
+
     init_db()
     update_quottery_info_thread = Thread(target=update_database_with_active_bets)
     update_quottery_info_thread.daemon = True
@@ -450,5 +477,7 @@ if __name__ == '__main__':
 
     # Insert the ssl crt and key here
     ssl_context = (os.getenv('CERT_PATH'), os.getenv('CERT_KEY_PATH'))
+    if DEBUG_MODE:
+        ssl_context = 'adhoc'
 
-    app.run(host='0.0.0.0', port=5000, debug=False, ssl_context=ssl_context)
+    app.run(host='0.0.0.0', port=APP_PORT, debug=DEBUG_MODE, ssl_context=ssl_context)
