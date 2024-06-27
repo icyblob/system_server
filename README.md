@@ -1,6 +1,7 @@
 # system_server
 
-A server for handling the request and respond to the nodes and have ability to saving things into database
+A server for handling the request and respond to the nodes and have ability to saving things into database.
+This server code is Flask based at the momment.
 
 # Structure
 - **app.py** : Python file for handle connection with data base and web app
