@@ -13,10 +13,12 @@ import argparse
 app = Flask(__name__)
 CORS(app)
 
+# Init default parameters
 DEBUG_MODE = False
-# IP to an active node
-DEFAULT_NODE_IP = '5.199.134.150'
-DEFAULT_NODE_PORT = 31844
+APP_PORT = 5000
+NODE_IP = None
+NODE_PORT = None
+DATABASE_PATH = "."
 
 QUOTTERY_LIBS = 'libs/quottery_cpp/lib/libquottery_cpp.so'
 qt = None
@@ -448,26 +450,47 @@ def add_bet():
 
 
 if __name__ == '__main__':
+    # Init parameters with environment variables
+    if os.getenv('DEBUG_MODE'):
+        DEBUG_MODE = os.getenv('DEBUG_MODE')
+
+    if os.getenv('APP_PORT'):
+        APP_PORT = os.getenv('APP_PORT')
+
+    if os.getenv('NODE_IP'):
+        NODE_IP = os.getenv('NODE_IP')
+
+    if os.getenv('NODE_PORT'):
+        NODE_PORT = int(os.getenv('NODE_PORT'))
+
+    if os.getenv('DATABASE_PATH'):
+        DATABASE_PATH = os.getenv('DATABASE_PATH')
+
+
     # Create the parser
     parser = argparse.ArgumentParser(description='System server for qtry.')
 
     # Arguments
-    parser.add_argument('-appport', type=int, default=5000, help='The port of this app')
-    parser.add_argument('-nodeip', type=str, default=DEFAULT_NODE_IP, help='Node IP address')
-    parser.add_argument('-nodeport', type=int, default=DEFAULT_NODE_PORT, help='Node port number')
-    parser.add_argument('-dbpath', type=str, default='.', help='Directory contain the database file')
-    parser.add_argument('-debug', action='store_true', help='Enable debug mode (default: False)')
+    parser.add_argument('-appport', type=int, help='The port of this app')
+    parser.add_argument('-nodeip', type=str, help='Node IP address')
+    parser.add_argument('-nodeport', type=int, help='Node port number')
+    parser.add_argument('-dbpath', type=str, help='Directory contain the database file')
 
     # Execute the parse_args() method
     args = parser.parse_args()
 
-    # Access the arguments
-    DEBUG_MODE = args.debug
-    APP_PORT = args.appport
-    NODE_IP = args.nodeip
-    NODE_PORT = args.nodeport
-    DATABASE_PATH = args.dbpath
+    # Access the arguments and overwrite them
+    if args.appport:
+        APP_PORT = args.appport
+    if args.nodeip:
+        NODE_IP = args.nodeip
+    if args.nodeport:
+        NODE_PORT = args.nodeport
+    if args.dbpath:
+        DATABASE_PATH = args.dbpath
     DATABASE_FILE = os.path.join(DATABASE_PATH, DATABASE_FILE)
+
+    # Print the configuration to verify
     print("Launch the app with configurations")
     print(f"- App port: {APP_PORT}")
     print(f"- Node address: {NODE_IP}:{NODE_PORT}")
