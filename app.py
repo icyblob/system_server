@@ -98,7 +98,7 @@ def get_qtry_basic_info_from_node():
         return (sts, qtry_basic_info)
     except Exception as e:
         print(f"Error get active basic info of qtry from node: {e}")
-        return {}
+        return 1, {}
 
 def fetch_active_bets_from_node():
     # Connect to the node and get current active bets
@@ -107,7 +107,7 @@ def fetch_active_bets_from_node():
         return (sts, active_bets)
     except Exception as e:
         print(f"Error fetching active bets from node: {e}")
-        return {}
+        return (1, {})
 
 
 def get_bet_info_from_node(betId):
@@ -116,7 +116,7 @@ def get_bet_info_from_node(betId):
         return (sts, betInfo)
     except Exception as e:
         print(f"Error fetching active bets from node: {e}")
-        return []
+        return 1, {}
 
 
 def submit_join_bet(betInfo):
@@ -215,58 +215,60 @@ def update_database_with_active_bets():
                 print('[WARNING] Active bets from node is empty! Display the local database')
 
             sts, qt_basic_info = get_qtry_basic_info_from_node()
-
             if not qt_basic_info:
                 print('[WARNING] Basic info from node is empty!')
+            else:
+                # Connect to the database
+                conn = sqlite3.connect(DATABASE_FILE)
+                cursor = conn.cursor()
+                cursor.execute(f'''
+                    INSERT OR REPLACE INTO node_basic_info (
+                        ip,
+                        port,
+                        fee_per_slot_per_day,
+                        min_amount_per_slot,
+                        game_operator_fee,
+                        shareholders_fee,
+                        burn_fee,
+                        num_issued_bet,
+                        moneyflow,
+                        moneyflow_through_issuebet,
+                        moneyflow_through_joinbet,
+                        moneyflow_through_finalize,
+                        shareholders_earned_amount,
+                        shareholders_paid_amount,
+                        winners_earned_amount,
+                        distributed_amount,
+                        burned_amount,
+                        game_operator_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                    NODE_IP,
+                    NODE_PORT,
+                    qt_basic_info['fee_per_slot_per_day'],
+                    qt_basic_info['min_bet_slot_amount'],
+                    qt_basic_info['game_operator_fee'],
+                    qt_basic_info['share_holder_fee'],
+                    qt_basic_info['burn_fee'],
+                    qt_basic_info['n_issued_bet'],
+                    qt_basic_info['money_flow'],
+                    qt_basic_info['money_flow_through_issue_bet'],
+                    qt_basic_info['money_flow_through_join_bet'],
+                    qt_basic_info['money_flow_through_finalize_bet'],
+                    qt_basic_info['earned_amount_for_share_holder'],
+                    qt_basic_info['paid_amount_for_share_holder'],
+                    qt_basic_info['earned_amount_for_bet_winner'],
+                    qt_basic_info['distributed_amount'],
+                    qt_basic_info['burned_amount'],
+                    qt_basic_info['game_operator']
+                ))
 
-            # Connect to the database
+                conn.commit()
+                conn.close()
+
+            # Get the bet ids from db
             conn = sqlite3.connect(DATABASE_FILE)
             cursor = conn.cursor()
-
-            cursor.execute(f'''
-                INSERT OR REPLACE INTO node_basic_info (
-                    ip,
-                    port,
-                    fee_per_slot_per_day,
-                    min_amount_per_slot,
-                    game_operator_fee,
-                    shareholders_fee,
-                    burn_fee,
-                    num_issued_bet,
-                    moneyflow,
-                    moneyflow_through_issuebet,
-                    moneyflow_through_joinbet,
-                    moneyflow_through_finalize,
-                    shareholders_earned_amount,
-                    shareholders_paid_amount,
-                    winners_earned_amount,
-                    distributed_amount,
-                    burned_amount,
-                    game_operator_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                NODE_IP,
-                NODE_PORT,
-                qt_basic_info['fee_per_slot_per_day'],
-                qt_basic_info['min_bet_slot_amount'],
-                qt_basic_info['game_operator_fee'],
-                qt_basic_info['share_holder_fee'],
-                qt_basic_info['burn_fee'],
-                qt_basic_info['n_issued_bet'],
-                qt_basic_info['money_flow'],
-                qt_basic_info['money_flow_through_issue_bet'],
-                qt_basic_info['money_flow_through_join_bet'],
-                qt_basic_info['money_flow_through_finalize_bet'],
-                qt_basic_info['earned_amount_for_share_holder'],
-                qt_basic_info['paid_amount_for_share_holder'],
-                qt_basic_info['earned_amount_for_bet_winner'],
-                qt_basic_info['distributed_amount'],
-                qt_basic_info['burned_amount'],
-                qt_basic_info['game_operator']
-            ))
-
-            conn.commit()
-
             cursor.execute(f"SELECT bet_id FROM quottery_info")
             db_bet_ids = cursor.fetchall()
             db_bet_ids = [row[0] for row in db_bet_ids]
