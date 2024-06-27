@@ -11,7 +11,7 @@ FROM ${base_image} as build_image_runtime
 ARG DEBIAN_FRONTEND
 ARG package_location
 
-# Install Python 3, pip, cmake, and other dependencies
+# Install runtime environment
 RUN apt-get update && \
     apt-get install -y python3 python3-pip && \
     apt-get clean
@@ -22,7 +22,7 @@ FROM ${base_image} as build_image_develop
 ARG DEBIAN_FRONTEND
 ARG package_location
 
-# Install Python 3, pip, cmake, and other dependencies
+# Install cmake, git and dev environments
 RUN apt-get update && \
     apt-get install -y cmake build-essential && \
     apt-get clean
@@ -41,7 +41,7 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # Copy the requirements.txt file
-COPY ${package_location}/* /app/
+COPY ${package_location}/ /app/
 
 # Install the required Python packages
 RUN pip3 install --no-cache-dir -r requirements.txt

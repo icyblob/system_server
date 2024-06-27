@@ -13,27 +13,21 @@ This CMake project will use function implement in **submodule/qubic-cli** and cr
 
 It try to replicate what qubic-cli handle the quoterry
 
-# How to build with Docker
+# Use Docker
 
+## Run with docker
+- Change your settings in `docker-compose.yml`
 - Run
 ```commandline
-docker build -t flask-app .
+docker compose up
 ```
 
-- Run the docker container
+## Build with docker
+If you want to build a local image, use `build_docker.sh` to manually build your customized docker image.
 ```commandline
-docker run -d -p 5000:5000 -v ${HOST_SERVER_KEY_LOCATION}:${DOCKER_KEY_LOCATION} -e CERT_PATH=${CERT_PATH} -e CERT_KEY_PATH=${CERT_KEY_PATH} --name flask-app-container flask-app
+./build_docker.sh
 ```
-
-- HOST_SERVER_KEY_LOCATION : path to crt and private file on host
-- DOCKER_KEY_LOCATION : path to crt and private file in Docker container
-- CERT_PATH : full path to the certification in Docker container
-- CERT_KEY_PATH: full path to private key in Docker container
-
-Example:
-```
-docker run -d -p 5000:5000 -v /etc/key_here:/etc/docker_key_here -e CERT_PATH=/etc/docker_key_here/certificate.crt -e CERT_KEY_PATH=/etc/docker_key_here/private.key --name flask-app-container flask-app
-```
+Then update the image in section `image` in `docker-compose.yml`
 
 # How to build on local machine
 

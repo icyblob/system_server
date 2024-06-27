@@ -2,7 +2,8 @@ version: '3.8'
 
 services:
   flask-app:
-    build: .
+    # Change the path to suitable Docker image
+    image: "ghcr.io/icyblob/flask-app:latest"
     ports:
         # Change the port if neccessary
       - "5000:5000"
