@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # If this is enabled both runtime and develop image will be re-built
 BUILD_ALL=1
 
