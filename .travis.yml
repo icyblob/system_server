@@ -1,0 +1,12 @@
+language: bash  # Specify the language as bash since we're using a bash script
+
+services:
+  - docker  # Enable Docker service
+
+# Before install step can be used to update Docker if needed
+before_install:
+  - docker --version  # Check the Docker version
+
+# The script to build your Docker image
+script:
+  - ./build_docker.sh
