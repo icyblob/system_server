@@ -41,7 +41,7 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # Copy the requirements.txt file
-COPY ${package_location}/* /app/
+COPY ${package_location}/ /app/
 
 # Install the required Python packages
 RUN pip3 install --no-cache-dir -r requirements.txt
