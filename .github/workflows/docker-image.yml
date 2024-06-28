@@ -20,7 +20,7 @@ jobs:
     - name: Start Docker Compose with Timeout
       run: |
         timeout 30s docker-compose up
-      continue-on-error: true
+      continue-on-error: false
     
     - name: Docker Compose Down
       if: always()
