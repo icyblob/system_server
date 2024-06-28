@@ -49,6 +49,7 @@ int quotteryWrapperGetActiveBet(
     uint32_t& betCount,
     uint32_t* betIDs)
 {
+    betCount = 0;
     getActiveBet_output result;
     try
     {
