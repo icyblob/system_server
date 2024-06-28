@@ -1,21 +1,29 @@
-version: '3.8'
+x-common-env: &common-env DATABASE_PATH=/database
 
 services:
+  db-updater:
+    # Change the path to suitable Docker image
+    image: "ghcr.io/icyblob/flask-app:latest"
+    volumes:
+        # Mount the current folder as folder for saving database. Make sure you mount the same folder with flask-app
+      - .:/database
+    environment:
+      - NODE_IP=5.199.134.150         # example node IP. Replace with the real IP
+      - NODE_PORT=31844               # example node port. Replace with the real port
+      - *common-env
+    command: ["python3", "db_updater.py"]
   flask-app:
     # Change the path to suitable Docker image
     image: "ghcr.io/icyblob/flask-app:latest"
     ports:
-        # Change the port if neccessary
-      - "5000:5000"
+      - 5000:5000
     volumes:
-        # Mount the current folder as folder for saving database. You can change to other path on your favor
+        # Mount the current folder as folder for saving database. Make sure you mount the same folder with db-updater
       - .:/database
       - .:/cert
     environment:
       - FLASK_ENV=production
       - CERT_PATH=/cert/qtry.crt      # replace your crt here
       - CERT_KEY_PATH=/cert/qtry.key  # replace your key here
-      - NODE_IP=5.199.134.150         # example node IP. Replace with the real IP
-      - NODE_PORT=31844               # example node port. Replace with the real port
-      - DATABASE_PATH=/database
+      - *common-env
     command: ["python3", "app.py"]

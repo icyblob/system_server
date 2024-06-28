@@ -1,5 +1,7 @@
 import ctypes
 from collections import defaultdict
+import logging
+import time
 # Define the C++ Quottery struct wrapper
 
 DEFAULT_START_HHMMSS = '00:00:00'
@@ -124,10 +126,17 @@ def pack_time_to_4uint8(s):
     return result
 
 class QuotteryCppWrapper:
-    def __init__(self, libs, nodeIP, port):
+    def __init__(self, libs, nodeIP, port, logName=''):
 
         self.nodeIP = nodeIP
         self.port = port
+
+        log_format = '[%(name)s][%(asctime)s] %(message)s'
+        # Configure the logging module to use the custom format
+        logging.basicConfig(level=logging.INFO, format=log_format)
+        self.logger = logging.getLogger('QTRY_CPP_WRAPPER')
+        if logName:
+            self.logger = logging.getLogger(logName)
 
         # Constant parameters
         self.scheduleTickOffset = 5
@@ -206,7 +215,7 @@ class QuotteryCppWrapper:
             'utf-8'), self.port, ctypes.byref(qt_basic_info))
 
         if sts :
-            print('[WARNING] Failed to get qtry basic info')
+            self.logger.warning('[WARNING] Failed to get qtry basic info')
             return (sts, basic_info)
 
         # Fill the data in dictionary
@@ -242,7 +251,7 @@ class QuotteryCppWrapper:
             'utf-8'), self.port, betId, ctypes.byref(qt_output_result))
 
         if sts:
-            print('[WARNING] Failed to get info of active bet ID', betId)
+            self.logger.warning('[WARNING] Failed to get info of active bet ID %d', betId)
             return (sts, bet_info)
 
         bet_info['bet_id'] = betId
@@ -335,11 +344,11 @@ class QuotteryCppWrapper:
         sts = self.quottery_cpp_func.quotteryWrapperGetActiveBet(self.nodeIP.encode(
             'utf-8'), self.port, ctypes.pointer(numberOfActiveBets), arrayPointer)
         if sts:
-            print('Get active bets failed!')
+            self.logger.warning('Get active bets failed!')
             return (sts, activeBets)
 
         bets_count = numberOfActiveBets.value
-        print("There are", bets_count, "bets:", arrayPointer[0:bets_count])
+        self.logger.info("There are %d bets: %s", bets_count, arrayPointer[0:bets_count])
 
         # Process each active bet and recording it
         for i in range(0, bets_count):
@@ -408,7 +417,7 @@ class QuotteryCppWrapper:
             tx_hash,
             ctypes.pointer(tx_tick))
         if  sts!= 0:
-            print('Join bet failed!')
+            self.logger.warning('Join bet failed!')
             tx_tick = 0
             tx_hash = "0"
 
@@ -437,7 +446,7 @@ class QuotteryCppWrapper:
         # Serialize all Oracles ID and convert it to public key.
         num_of_oracles = len(betInfo["oracle_id"])
         if num_of_oracles > 8:
-            print("Too much of Oracles. Expect 8 and belows")
+            self.logger.warning("Too much of Oracles. Expect 8 and belows")
         num_of_oracles = min(num_of_oracles, 8)
         qt_input_bet.oracleProviderId = (ctypes.c_uint8 * 256)()
         qt_input_bet.oracleFees = (ctypes.c_uint32 * 8)()
@@ -472,7 +481,7 @@ class QuotteryCppWrapper:
             'utf-8'), self.port, betInfo['seed'].encode('utf-8'), qt_input_bet, self.scheduleTickOffset, tx_hash, ctypes.pointer(tx_tick))
 
         if  sts!= 0:
-            print('Add bet failed!')
+            self.logger.warning('Add bet failed!')
             tx_tick = 0
             tx_hash = "0"
 
