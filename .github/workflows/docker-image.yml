@@ -17,10 +17,11 @@ jobs:
     - name: Update Submodules and Build Docker
       run: git submodule update --recursive --init && ./build_docker.sh
     
-    - name: Start Docker Compose with Timeout
+    - name: Start Docker Compose with Timeout and Check for Errors
       run: |
-        timeout 30s docker-compose up
-      continue-on-error: false
+        timeout 30s docker-compose up -d
+        docker-compose logs
+        docker-compose ps -q | xargs docker inspect -f '{{ .State.ExitCode }}' | grep -q '^0$' || exit 1
     
     - name: Docker Compose Down
       if: always()
