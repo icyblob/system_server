@@ -14,5 +14,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Build the Docker image
+    - name: Update Submodules and Build Docker
       run: git submodule update --recursive --init && ./build_docker.sh
+
+    - name: Start Docker Compose with Timeout
+      run: |
+        timeout 30s docker-compose up &
+        sleep 30
+        docker-compose down
