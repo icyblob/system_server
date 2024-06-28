@@ -16,6 +16,15 @@ RUN apt-get update && \
     apt-get install -y python3 python3-pip && \
     apt-get clean
 
+# Copy requirement and do the installation
+COPY requirements.txt /tmp
+
+# Install the required Python packages
+RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
+
+# Remove the file
+RUN rm -rf  /tmp/requirements.txt
+
 #********************Setup an develop environment for building.
 # If this scale up, we will switch to dual images
 FROM ${base_image} as build_image_develop
@@ -42,9 +51,6 @@ WORKDIR /app
 
 # Copy the requirements.txt file
 COPY ${package_location}/ /app/
-
-# Install the required Python packages
-RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Expose the port that the Flask app runs on
 EXPOSE 5000
