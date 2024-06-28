@@ -17,6 +17,9 @@ jobs:
     - name: Update Submodules and Build Docker
       run: git submodule update --recursive --init && ./build_docker.sh
 
+    - name: Replace Docker Image in docker-compose.yml
+      run: sed -i 's|ghcr.io/icyblob/flask-app:latest|docker.io/library/flask-app|g' docker-compose.yml
+
     - name: Generate SSL Certificates
       run: |
         openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes -keyout qtry.key -out qtry.crt -subj "/CN=example.com" -addext "subjectAltName=DNS:example.com,DNS:*.example.com,IP:10.0.0.1"
