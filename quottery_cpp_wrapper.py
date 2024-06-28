@@ -2,6 +2,8 @@ import ctypes
 from collections import defaultdict
 # Define the C++ Quottery struct wrapper
 
+DEFAULT_START_HHMMSS = '00:00:00'
+DEFAULT_END_HHMMSS = '23:59:59'
 
 class QuotteryjoinBetInput(ctypes.Structure):
     _fields_ = [
@@ -20,6 +22,8 @@ class QuotteryissueBetInput(ctypes.Structure):
         ('oracleFees', ctypes.c_uint32 * 8),
         ('closeDate', ctypes.c_uint8 * 4),
         ('endDate', ctypes.c_uint8 * 4),
+        ('closeTime', ctypes.c_uint8 * 4),
+        ('endTime', ctypes.c_uint8 * 4),
         ('amountPerSlot', ctypes.c_uint64),
         ('maxBetSlotPerOption', ctypes.c_uint32),
         ('numberOfOption', ctypes.c_uint32)
@@ -52,6 +56,10 @@ class BetInfoOutput(ctypes.Structure):
         ('openDate', ctypes.c_uint8 * 4),
         ('closeDate', ctypes.c_uint8 * 4),   # stop receiving bet date
         ('endDate', ctypes.c_uint8 * 4),       # result date
+        # Placeholder for time. Not implemented in node yet
+        ('openTime', ctypes.c_uint8 * 4),
+        ('closeTime', ctypes.c_uint8 * 4),   # stop receiving bet date
+        ('endTime', ctypes.c_uint8 * 4),       # result date
         #     // Amounts and numbers
         ('minBetAmount', ctypes.c_uint64),
         ('maxBetSlotPerOption', ctypes.c_uint32),
@@ -104,6 +112,16 @@ def pack_date_to_4uint8(s):
     result[3] = 0
     return result
 
+def pack_time_to_4uint8(s):
+    # Extract the day part of the string (first two characters)
+    date_str = s.split(':')
+
+    result = (ctypes.c_uint8 * 4)()
+    result[0] = int(date_str[0])
+    result[1] = int(date_str[1])
+    result[2] = int(date_str[2])
+    result[3] = 0
+    return result
 
 class QuotteryCppWrapper:
     def __init__(self, libs, nodeIP, port):
@@ -264,6 +282,12 @@ class QuotteryCppWrapper:
             f"{qt_output_result.endDate[1]:02}" + \
             '-' + f"{qt_output_result.endDate[2]:02}"
 
+        # Hardcode time here.
+        # TODO: update this if the node return value
+        bet_info['open_time'] = DEFAULT_START_HHMMSS
+        bet_info['close_time'] = DEFAULT_END_HHMMSS
+        bet_info['end_time'] = DEFAULT_END_HHMMSS
+
         # Oracle id and fee. Assume they are follow extract order
         bet_info['oracle_id'] = []
         bet_info['oracle_fee'] = []
@@ -393,6 +417,12 @@ class QuotteryCppWrapper:
     def add_bet(self, betInfo):
         qt_input_bet = QuotteryissueBetInput()
 
+        # Place holder for the time.
+        if not 'close_time' in betInfo:
+            betInfo['close_time'] = DEFAULT_END_HHMMSS
+        if not 'end_time' in betInfo:
+            betInfo['end_time'] = DEFAULT_END_HHMMSS
+
         # Bet decription
         qt_input_bet.betDesc = (ctypes.c_uint8 * 32)(*
                                                      bytearray(betInfo['bet_desc'].encode('utf-8')))
@@ -424,6 +454,9 @@ class QuotteryCppWrapper:
 
         qt_input_bet.closeDate = pack_date_to_4uint8(betInfo['close_date'])
         qt_input_bet.endDate = pack_date_to_4uint8(betInfo['end_date'])
+
+        qt_input_bet.closeTime = pack_time_to_4uint8(betInfo['close_time'])
+        qt_input_bet.endTime = pack_time_to_4uint8(betInfo['end_time'])
 
         qt_input_bet.amountPerSlot = ctypes.c_uint64(
             int(betInfo['amount_per_bet_slot']))
