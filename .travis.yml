@@ -1,12 +1,18 @@
 language: bash  # Specify the language as bash since we're using a bash script
 
+os: linux
+dist: jammy  # Use Ubuntu 22.04
+
 services:
   - docker  # Enable Docker service
 
-# Before install step can be used to update Docker if needed
-before_install:
-  - docker --version  # Check the Docker version
+jobs:
+  include:
+    - name: "Docker Build"
+      resources:
+        requests:
+          cpu: 2
+          memory: 8G
 
-# The script to build your Docker image
 script:
   - ./build_docker.sh
