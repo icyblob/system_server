@@ -41,6 +41,9 @@ def init_db():
             open_date TEXT,
             close_date TEXT,
             end_date TEXT,
+            open_time TEXT,
+            close_time TEXT,
+            end_time TEXT,
             result INTEGER,
             no_ops INTEGER,
             oracle_id TEXT,
@@ -307,6 +310,9 @@ def update_database_with_active_bets():
                                     open_date,
                                     close_date,
                                     end_date,
+                                    open_time,
+                                    close_time,
+                                    end_time,
                                     result,
                                     no_ops,
                                     oracle_id,
@@ -316,7 +322,7 @@ def update_database_with_active_bets():
                                     current_num_selection,
                                     current_total_qus,
                                     betting_odds)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ''', (
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ''', (
                         active_bet['bet_id'],
                         active_bet['no_options'],
                         active_bet['creator'],
@@ -328,6 +334,9 @@ def update_database_with_active_bets():
                         active_bet['open_date'],
                         active_bet['close_date'],
                         active_bet['end_date'],
+                        active_bet['open_time'],
+                        active_bet['close_time'],
+                        active_bet['end_time'],
                         active_bet['result'],
                         active_bet['no_ops'],
                         json.dumps(active_bet['oracle_id']),  # This should be a separate table

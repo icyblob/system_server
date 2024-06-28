@@ -19,6 +19,12 @@ struct BetInfoOutput
     uint8_t openDate[4];  // creation date, start to receive bet
     uint8_t closeDate[4]; // stop receiving bet date
     uint8_t endDate[4];   // result date
+
+    // Placeholder. Not implemented in node yet
+    uint8_t openTime[4];  // creation time, start to receive bet
+    uint8_t closeTime[4]; // stop receiving bet time
+    uint8_t endTime[4];   // result time
+
     // Amounts and numbers
     uint64_t minBetAmount;
     uint32_t maxBetSlotPerOption;
@@ -37,6 +43,11 @@ struct QuotteryissueBetInput
     uint32_t oracleFees[8];
     uint8_t closeDate[4];
     uint8_t endDate[4];
+
+    // Placeholder. Not implemented in node yet
+    uint8_t openTime[4];
+    uint8_t closeTime[4];
+
     uint64_t amountPerSlot;
     uint32_t maxBetSlotPerOption;
     uint32_t numberOfOption;
