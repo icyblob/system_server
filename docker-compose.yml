@@ -7,6 +7,8 @@ services:
     volumes:
         # Mount the current folder as folder for saving database. Make sure you mount the same folder with flask-app
       - .:/database
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     environment:
       - NODE_IP=5.199.134.150         # example node IP. Replace with the real IP
       - NODE_PORT=31844               # example node port. Replace with the real port
@@ -19,8 +21,10 @@ services:
       - 5000:5000
     volumes:
         # Mount the current folder as folder for saving database. Make sure you mount the same folder with db-updater
-      - .:/database
-      - .:/cert
+      - .:/database:ro
+      - .:/cert:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     environment:
       - FLASK_ENV=production
       - CERT_PATH=/cert/qtry.crt      # replace your crt here
