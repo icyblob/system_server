@@ -14,6 +14,7 @@ services:
       - NODE_PORT=31844               # example node port. Replace with the real port
       - *common-env
     command: ["python3", "db_updater.py"]
+    restart: always
   flask-app:
     # Change the path to suitable Docker image
     image: "ghcr.io/icyblob/flask-app:latest"
@@ -31,3 +32,4 @@ services:
       - CERT_KEY_PATH=/cert/qtry.key  # replace your key here
       - *common-env
     command: ["python3", "app.py"]
+    restart: always
