@@ -27,7 +27,7 @@ mkdir ${package_location} && \
 cd ${package_location} && \
 cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=./redist/libs/quottery_cpp && \
 make install"
-install_cmd="cp -r ${DOCKER_SRC_DIR}/quottery_cpp_wrapper.py ${DOCKER_SRC_DIR}/app.py ${DOCKER_SRC_DIR}/${package_location}/redist"
+install_cmd="cp -r ${DOCKER_SRC_DIR}/quottery_cpp_wrapper.py ${DOCKER_SRC_DIR}/db_updater.py ${DOCKER_SRC_DIR}/app.py ${DOCKER_SRC_DIR}/${package_location}/redist"
 docker run --rm -v ./:${DOCKER_SRC_DIR} -u $(id -u) ${DEV_IMAGE} bash -c "cd /app_code && $build_cmd && $install_cmd"
 
 # Package into a new release image base on runtime time
