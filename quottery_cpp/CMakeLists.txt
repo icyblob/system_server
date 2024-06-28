@@ -20,7 +20,7 @@ target_include_directories(${PROJECT_NAME}
 
 # Install library to a specific location
 # Below variables are set so that the export target can be relativu
-set(INCLUDE_INSTALL_DIR include)
+set(INCLUDE_INSTALL_DIR include/${PROJECT_NAME})
 set(LIBRARY_INSTALL_DIR lib)
 set(BINARY_INSTALL_DIR bin)
 set(CONFIG_INSTALL_DIR ${LIBRARY_INSTALL_DIR}/cmake/${PROJECT_NAME})
@@ -46,5 +46,5 @@ install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
     DESTINATION "${CONFIG_INSTALL_DIR}")
 install(DIRECTORY
-    include
+    include/
     DESTINATION "${INCLUDE_INSTALL_DIR}")
