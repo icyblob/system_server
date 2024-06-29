@@ -37,6 +37,7 @@ jobs:
     - name: Start Docker Compose with Timeout and Check for Errors
       run: |
         docker-compose up -d
+        sleep 30
         docker-compose logs
         docker-compose ps -q | xargs docker inspect -f '{{ .State.ExitCode }}' | grep -q '^0$' || exit 1
 
