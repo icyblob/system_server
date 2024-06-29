@@ -23,12 +23,30 @@ jobs:
     - name: Generate SSL Certificates
       run: |
         openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes -keyout qtry.key -out qtry.crt -subj "/CN=example.com" -addext "subjectAltName=DNS:example.com,DNS:*.example.com,IP:10.0.0.1"
-    
+
     - name: Start Docker Compose with Timeout and Check for Errors
       run: |
-        timeout 30s docker-compose up -d
+        docker-compose up -d
         docker-compose logs
         docker-compose ps -q | xargs docker inspect -f '{{ .State.ExitCode }}' | grep -q '^0$' || exit 1
+
+    - name: log print ls
+      run: |
+        docker-compose exec -T flask-app ls
+        docker compose ps 
+
+    - name: Install sqlite3 in Docker Container
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y sqlite3
+        
+    - name: Print SQLite Database Contents
+      run: |
+        echo ".mode column" > .sqlite_commands
+        echo ".headers on" >> .sqlite_commands
+        echo "SELECT * FROM quottery_info;" >> .sqlite_commands
+        echo "SELECT * FROM node_basic_info;" >> .sqlite_commands
+        sqlite3 database.db < .sqlite_commands
     
     - name: Docker Compose Down
       if: always()
