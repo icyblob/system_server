@@ -14,6 +14,16 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Prune All Docker Images
+      run: docker system prune -a -f
+
+    - name: Remove database.db if it exists
+      run: |
+        if [ -f database.db ]; then
+          rm database.db
+        fi
+    
     - name: Update Submodules and Build Docker
       run: git submodule update --recursive --init && ./build_docker.sh
 
