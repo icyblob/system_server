@@ -1,3 +1,5 @@
+[![Docker Image CI](https://github.com/icyblob/system_server/actions/workflows/docker-image.yml/badge.svg)](https://github.com/icyblob/system_server/actions/workflows/docker-image.yml)
+
 # system_server
 
 A server for handling the request and respond to the nodes and have ability to saving things into database
