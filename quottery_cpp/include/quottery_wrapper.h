@@ -31,24 +31,6 @@ struct BetInfoOutput
     int8_t betResultOPId[8];
 };
 
-struct QuotteryissueBetInput
-{
-    uint8_t betDesc[32];
-    uint8_t optionDesc[32 * 8];
-    uint8_t oracleProviderId[32 * 8];
-    uint32_t oracleFees[8];
-    uint8_t closeDate[4];
-    uint8_t endDate[4];
-
-    // Placeholder. Not implemented in node yet
-    uint8_t openTime[4];
-    uint8_t closeTime[4];
-
-    uint64_t amountPerSlot;
-    uint32_t maxBetSlotPerOption;
-    uint32_t numberOfOption;
-};
-
 struct QuotteryBasicInfoOutput
 {
     uint64_t feePerSlotPerHour; // Amount of qus
@@ -88,27 +70,4 @@ int quotteryWrapperGetBetInfo(
     const int nodePort,
     int betId,
     BetInfoOutput& result);
-
-// Join a bet
-int quotteryWrapperJoinBet(
-    const char* nodeIp,
-    int nodePort,
-    const char* seed,
-    uint32_t betId,
-    int numberOfBetSlot,
-    uint64_t amountPerSlot,
-    uint8_t option,
-    uint32_t scheduledTickOffset,
-    char* txHash,
-    uint32_t& txTick);
-
-// Issue a bet
-int quotteryWrapperIssueBet(
-    const char* nodeIp,
-    int nodePort,
-    const char* seed,
-    QuotteryissueBetInput betInfo,
-    uint32_t scheduledTickOffset,
-    char* txHash,
-    uint32_t& txTick);
 }
