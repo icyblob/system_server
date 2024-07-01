@@ -15,7 +15,7 @@ class QuotteryjoinBetInput(ctypes.Structure):
         ("_placeHolder", ctypes.c_uint32)
     ]
 
-
+# TODO: verify the date and time
 class QuotteryissueBetInput(ctypes.Structure):
     _fields_ = [
         ('betDesc', ctypes.c_uint8 * 32),
@@ -54,14 +54,12 @@ class BetInfoOutput(ctypes.Structure):
         ('optionDesc', ctypes.c_uint8 * 256),  # 8x(32)=256bytes
         ('oracleProviderId', ctypes.c_uint8 * 256),  # 256x8=2048bytes ???
         ('oracleFees', ctypes.c_uint32 * 8),   # 4x8 = 32 bytes
-        # creation date, start to receive bet
-        ('openDate', ctypes.c_uint8 * 4),
-        ('closeDate', ctypes.c_uint8 * 4),   # stop receiving bet date
-        ('endDate', ctypes.c_uint8 * 4),       # result date
-        # Placeholder for time. Not implemented in node yet
-        ('openTime', ctypes.c_uint8 * 4),
-        ('closeTime', ctypes.c_uint8 * 4),   # stop receiving bet date
-        ('endTime', ctypes.c_uint8 * 4),       # result date
+
+        # Time relate to the bet. The format is [YY, MM, DD, HH, MM, SS]
+        ('openDateTime', ctypes.c_uint8 * 6),
+        ('closeDateTime', ctypes.c_uint8 * 6),   # stop receiving bet date
+        ('endDateTime', ctypes.c_uint8 * 6),       # result date
+
         #     // Amounts and numbers
         ('minBetAmount', ctypes.c_uint64),
         ('maxBetSlotPerOption', ctypes.c_uint32),
@@ -80,7 +78,7 @@ class BetInfoOutput(ctypes.Structure):
 
 class QtryBasicInfoOutput(ctypes.Structure):
     _fields_ = [
-    ('feePerSlotPerDay', ctypes.c_uint64),  # Amount of qus
+    ('feePerSlotPerHour', ctypes.c_uint64),  # Amount of qus
     ('gameOperatorFee', ctypes.c_uint64),  # 4 digit number ABCD means AB.CD% | 1234 is 12.34%
     ('shareholderFee', ctypes.c_uint64),   # 4 digit number ABCD means AB.CD% | 1234 is 12.34%
     ('minBetSlotAmount', ctypes.c_uint64), # amount of qus
@@ -219,7 +217,7 @@ class QuotteryCppWrapper:
             return (sts, basic_info)
 
         # Fill the data in dictionary
-        basic_info['fee_per_slot_per_day'] = qt_basic_info.feePerSlotPerDay
+        basic_info['fee_per_slot_per_hour'] = qt_basic_info.feePerSlotPerHour
         basic_info['game_operator_fee'] = qt_basic_info.gameOperatorFee / 100
         basic_info['share_holder_fee'] = qt_basic_info.shareholderFee / 100
         basic_info['min_bet_slot_amount'] = qt_basic_info.minBetSlotAmount
@@ -281,21 +279,27 @@ class QuotteryCppWrapper:
 
         bet_info['max_slot_per_option'] = qt_output_result.maxBetSlotPerOption
 
-        bet_info['open_date'] = f"{qt_output_result.openDate[0]:02}" + '-' + \
-            f"{qt_output_result.openDate[1]:02}" + \
-            '-' + f"{qt_output_result.openDate[2]:02}"
-        bet_info['close_date'] = f"{qt_output_result.closeDate[0]:02}" + '-' + \
-            f"{qt_output_result.closeDate[1]:02}" + \
-            '-' + f"{qt_output_result.closeDate[2]:02}"
-        bet_info['end_date'] = f"{qt_output_result.endDate[0]:02}" + '-' + \
-            f"{qt_output_result.endDate[1]:02}" + \
-            '-' + f"{qt_output_result.endDate[2]:02}"
+        bet_info['open_date'] = f"{qt_output_result.openDateTime[0]:02}" + '-' + \
+            f"{qt_output_result.openDateTime[1]:02}" + \
+            '-' + f"{qt_output_result.openDateTime[2]:02}"
+        bet_info['open_time'] = f"{qt_output_result.openDateTime[3]:02}" + ':' + \
+            f"{qt_output_result.openDateTime[4]:02}" + \
+            ':' + f"{qt_output_result.openDateTime[5]:02}"
+        
+        bet_info['close_date'] = f"{qt_output_result.closeDateTime[0]:02}" + '-' + \
+            f"{qt_output_result.closeDateTime[1]:02}" + \
+            '-' + f"{qt_output_result.closeDateTime[2]:02}"
+        bet_info['close_time'] = f"{qt_output_result.closeDateTime[3]:02}" + ':' + \
+            f"{qt_output_result.closeDateTime[4]:02}" + \
+            ':' + f"{qt_output_result.closeDateTime[5]:02}"
+        
+        bet_info['end_date'] = f"{qt_output_result.endDateTime[0]:02}" + '-' + \
+            f"{qt_output_result.endDateTime[1]:02}" + \
+            '-' + f"{qt_output_result.endDateTime[2]:02}"
+        bet_info['end_time'] = f"{qt_output_result.endDateTime[3]:02}" + ':' + \
+            f"{qt_output_result.endDateTime[4]:02}" + \
+            ':' + f"{qt_output_result.endDateTime[5]:02}"
 
-        # Hardcode time here.
-        # TODO: update this if the node return value
-        bet_info['open_time'] = DEFAULT_START_HHMMSS
-        bet_info['close_time'] = DEFAULT_END_HHMMSS
-        bet_info['end_time'] = DEFAULT_END_HHMMSS
 
         # Oracle id and fee. Assume they are follow extract order
         bet_info['oracle_id'] = []
@@ -423,6 +427,7 @@ class QuotteryCppWrapper:
 
         return (tx_hash.value.decode('utf-8'), int(tx_tick.value))
 
+    # TODO: verify the time
     def add_bet(self, betInfo):
         qt_input_bet = QuotteryissueBetInput()
 

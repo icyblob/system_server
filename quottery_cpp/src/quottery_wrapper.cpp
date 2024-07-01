@@ -23,7 +23,7 @@ int quotteryWrapperGetBasicInfo(const char* nodeIp, const int nodePort, Quottery
     // quotteryPrintBasicInfo(nodeIp, nodePort);
 
     // Fill the external struct
-    result.feePerSlotPerDay = basicInfo.feePerSlotPerDay;
+    result.feePerSlotPerHour = basicInfo.feePerSlotPerHour;
     result.gameOperatorFee = basicInfo.gameOperatorFee;
     result.shareholderFee = basicInfo.shareholderFee;
     result.minBetSlotAmount = basicInfo.minBetSlotAmount;
@@ -109,9 +109,31 @@ int quotteryWrapperGetBetInfo(
     std::copy(
         betOutput.oracleProviderId, betOutput.oracleProviderId + 8 * 32, result.oracleProviderId);
     std::copy(betOutput.oracleFees, betOutput.oracleFees + 8, result.oracleFees);
-    std::copy(betOutput.openDate, betOutput.openDate + 4, result.openDate);
-    std::copy(betOutput.closeDate, betOutput.closeDate + 4, result.closeDate);
-    std::copy(betOutput.endDate, betOutput.endDate + 4, result.endDate);
+    
+    // Process the time
+    unpackQuotteryDate(result.openDateTime[0],
+            result.openDateTime[1],
+            result.openDateTime[2],
+            result.openDateTime[3],
+            result.openDateTime[4],
+            result.openDateTime[5],
+            betOutput.openDate);
+
+    unpackQuotteryDate(result.closeDateTime[0],
+            result.closeDateTime[1],
+            result.closeDateTime[2],
+            result.closeDateTime[3],
+            result.closeDateTime[4],
+            result.closeDateTime[5],
+            betOutput.closeDate);
+
+    unpackQuotteryDate(result.endDateTime[0],
+            result.endDateTime[1],
+            result.endDateTime[2],
+            result.endDateTime[3],
+            result.endDateTime[4],
+            result.endDateTime[5],
+            betOutput.endDate);
 
     result.minBetAmount = betOutput.minBetAmount;
     result.maxBetSlotPerOption = betOutput.maxBetSlotPerOption;
