@@ -5,6 +5,62 @@
 #include <keyUtils.h>
 #include <quottery.h>
 
+// year: 6 bits (max: 64. count from 24, ie: value 0 means year 24)
+// month: 4 bits ([1-12])
+// days: 5 bits ([1-31])
+// hours: 5 bits ([0-23])
+// min: 6 bits ([0-59])
+// sec: 6 bits ([0-59])
+// total 32 bits
+static const uint8_t SECOND_BITS = 6;
+static const uint8_t MINUTE_BITS = 6;
+static const uint8_t HOUR_BITS = 5;
+
+static const uint8_t DAY_BITS = 5;
+static const uint8_t MONTH_BITS = 4;
+static const uint8_t YEAR_BITS = 6;
+static const uint8_t YEAR_OFFSET = 24;
+
+inline uint8_t
+extractNextUint8FromUint32(const uint32_t rawData, uint8_t& nextShiftBit, const uint8_t bitsCount)
+{
+    nextShiftBit = nextShiftBit - bitsCount;
+    uint8_t data = (rawData << nextShiftBit) >> (32 - bitsCount);
+    return data;
+}
+
+int convertRawQtryDateTime(
+    const uint32_t rawData,
+    uint8_t& rYear,
+    uint8_t& rMonth,
+    uint8_t& rDay,
+    uint8_t& rHour,
+    uint8_t& rMinute,
+    uint8_t& rSecond)
+{
+    uint8_t shift_bit = 32;
+
+    // Second: 6 bits
+    rSecond = extractNextUint8FromUint32(rawData, shift_bit, SECOND_BITS);
+
+    // Minute : next 6 bits
+    rMinute = extractNextUint8FromUint32(rawData, shift_bit, MINUTE_BITS);
+
+    // Hour : next 5 bits
+    rHour = extractNextUint8FromUint32(rawData, shift_bit, HOUR_BITS);
+
+    // Day : next 5 bits
+    rDay = extractNextUint8FromUint32(rawData, shift_bit, DAY_BITS);
+
+    // Month : next 4 bits
+    rMonth = extractNextUint8FromUint32(rawData, shift_bit, MONTH_BITS);
+
+    // Year : next 6 bits
+    rYear = extractNextUint8FromUint32(rawData, shift_bit, YEAR_BITS) + YEAR_OFFSET;
+
+    return 0;
+}
+
 int quotteryWrapperGetBasicInfo(const char* nodeIp, const int nodePort, QuotteryBasicInfoOutput& result)
 {
     // Get the inform with standard api
@@ -109,9 +165,34 @@ int quotteryWrapperGetBetInfo(
     std::copy(
         betOutput.oracleProviderId, betOutput.oracleProviderId + 8 * 32, result.oracleProviderId);
     std::copy(betOutput.oracleFees, betOutput.oracleFees + 8, result.oracleFees);
-    std::copy(betOutput.openDate, betOutput.openDate + 4, result.openDate);
-    std::copy(betOutput.closeDate, betOutput.closeDate + 4, result.closeDate);
-    std::copy(betOutput.endDate, betOutput.endDate + 4, result.endDate);
+    
+    // Process the time
+    uint32_t openTimeDate = 0;
+    std::copy(betOutput.openDate, betOutput.openDate + 4, &openTimeDate);
+    convertRawQtryDateTime(openTimeDate, result.openDateTime[0],
+            result.openDateTime[1],
+            result.openDateTime[2],
+            result.openDateTime[3],
+            result.openDateTime[4],
+            result.openDateTime[5]);
+
+    uint32_t closeTimeDate = 0;
+    std::copy(betOutput.closeDate, betOutput.closeDate + 4, &closeTimeDate);
+    convertRawQtryDateTime(closeTimeDate, result.closeTimeDate[0],
+            result.closeTimeDate[1],
+            result.closeTimeDate[2],
+            result.closeTimeDate[3],
+            result.closeTimeDate[4],
+            result.closeTimeDate[5]);
+
+    uint32_t endTimeDate = 0;
+    std::copy(betOutput.endDate, betOutput.endDate + 4, &endTimeDate);
+    convertRawQtryDateTime(endTimeDate, result.endDateTime[0],
+            result.endDateTime[1],
+            result.endDateTime[2],
+            result.endDateTime[3],
+            result.endDateTime[4],
+            result.endDateTime[5]);
 
     result.minBetAmount = betOutput.minBetAmount;
     result.maxBetSlotPerOption = betOutput.maxBetSlotPerOption;
