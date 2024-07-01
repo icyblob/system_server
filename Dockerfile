@@ -7,7 +7,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 #********************Setup an runtime environment for running.
 # If this scale up, we will switch to dual images
-FROM ${base_image} as build_image_runtime
+FROM ${base_image} AS build_image_runtime
 ARG DEBIAN_FRONTEND
 ARG package_location
 
@@ -27,7 +27,7 @@ RUN rm -rf  /tmp/requirements.txt
 
 #********************Setup an develop environment for building.
 # If this scale up, we will switch to dual images
-FROM ${base_image} as build_image_develop
+FROM ${base_image} AS build_image_develop
 ARG DEBIAN_FRONTEND
 ARG package_location
 
@@ -37,7 +37,7 @@ RUN apt-get update && \
     apt-get clean
 
 #********************Package
-FROM ${base_image} as build_image_release
+FROM ${base_image} AS build_image_release
 ARG DEBIAN_FRONTEND
 ARG APP_DEPENDENCIES
 ARG package_location
