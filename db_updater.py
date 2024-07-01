@@ -75,7 +75,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS node_basic_info (
             ip TEXT,
             port INTEGER,
-            fee_per_slot_per_day INTEGER,
+            fee_per_slot_per_hour INTEGER,
             min_amount_per_slot INTEGER,
             game_operator_fee REAL,
             shareholders_fee REAL,
@@ -210,7 +210,7 @@ def update_database_with_active_bets():
                     INSERT OR REPLACE INTO node_basic_info (
                         ip,
                         port,
-                        fee_per_slot_per_day,
+                        fee_per_slot_per_hour,
                         min_amount_per_slot,
                         game_operator_fee,
                         shareholders_fee,
@@ -230,7 +230,7 @@ def update_database_with_active_bets():
                     ''', (
                     NODE_IP,
                     NODE_PORT,
-                    qt_basic_info['fee_per_slot_per_day'],
+                    qt_basic_info['fee_per_slot_per_hour'],
                     qt_basic_info['min_bet_slot_amount'],
                     qt_basic_info['game_operator_fee'],
                     qt_basic_info['share_holder_fee'],
@@ -273,12 +273,6 @@ def update_database_with_active_bets():
                     bet_status = 1
                     if active_bet['result'] >= 0:
                         bet_status = 0
-                    else: ## Datetime checking
-                        ### Convert the string to a datetime object
-                        date_end = datetime.strptime(active_bet['end_date'], '%y-%m-%d').replace(tzinfo=timezone.utc)
-                        current_utc_date = datetime.now(timezone.utc)
-                        if current_utc_date > date_end:
-                            bet_status = 0
                     cursor.execute('''
                         INSERT OR REPLACE INTO quottery_info (
                                     bet_id,

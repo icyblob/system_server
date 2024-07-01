@@ -16,14 +16,10 @@ struct BetInfoOutput
     uint8_t oracleProviderId[8 * 32]; // 256x8=2048bytes
     uint32_t oracleFees[8];           // 4x8 = 32 bytes
 
-    uint8_t openDate[4];  // creation date, start to receive bet
-    uint8_t closeDate[4]; // stop receiving bet date
-    uint8_t endDate[4];   // result date
-
-    // Placeholder. Not implemented in node yet
-    uint8_t openTime[4];  // creation time, start to receive bet
-    uint8_t closeTime[4]; // stop receiving bet time
-    uint8_t endTime[4];   // result time
+    // Below time will folow [YY, MM, DD, HH, MM, SS]
+    uint8_t openDateTime[6];  // creation date, start to receive bet
+    uint8_t closeDateTime[6]; // stop receiving bet date
+    uint8_t endDateTime[6];   // result date
 
     // Amounts and numbers
     uint64_t minBetAmount;
@@ -55,7 +51,7 @@ struct QuotteryissueBetInput
 
 struct QuotteryBasicInfoOutput
 {
-    uint64_t feePerSlotPerDay; // Amount of qus
+    uint64_t feePerSlotPerHour; // Amount of qus
     uint64_t gameOperatorFee; // 4 digit number ABCD means AB.CD% | 1234 is 12.34%
     uint64_t shareholderFee; // 4 digit number ABCD means AB.CD% | 1234 is 12.34%
     uint64_t minBetSlotAmount; // amount of qus
