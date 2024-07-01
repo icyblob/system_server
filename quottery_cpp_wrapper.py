@@ -4,33 +4,6 @@ import logging
 import time
 # Define the C++ Quottery struct wrapper
 
-DEFAULT_START_HHMMSS = '00:00:00'
-DEFAULT_END_HHMMSS = '23:59:59'
-
-class QuotteryjoinBetInput(ctypes.Structure):
-    _fields_ = [
-        ("betId", ctypes.c_uint32),
-        ("numberOfSlot", ctypes.c_int32),
-        ("option", ctypes.c_uint32),
-        ("_placeHolder", ctypes.c_uint32)
-    ]
-
-# TODO: verify the date and time
-class QuotteryissueBetInput(ctypes.Structure):
-    _fields_ = [
-        ('betDesc', ctypes.c_uint8 * 32),
-        ('optionDesc', ctypes.c_uint8 * 256),
-        ('oracleProviderId', ctypes.c_uint8 * 256),
-        ('oracleFees', ctypes.c_uint32 * 8),
-        ('closeDate', ctypes.c_uint8 * 4),
-        ('endDate', ctypes.c_uint8 * 4),
-        ('closeTime', ctypes.c_uint8 * 4),
-        ('endTime', ctypes.c_uint8 * 4),
-        ('amountPerSlot', ctypes.c_uint64),
-        ('maxBetSlotPerOption', ctypes.c_uint32),
-        ('numberOfOption', ctypes.c_uint32)
-    ]
-
 
 class QuotteryFeesOutput(ctypes.Structure):
     _fields_ = [
@@ -42,7 +15,6 @@ class QuotteryFeesOutput(ctypes.Structure):
         ('minBetSlotAmount', ctypes.c_uint64),
         ('gameOperatorPubkey', ctypes.c_uint8 * 32)
     ]
-
 
 class BetInfoOutput(ctypes.Structure):
     #     // meta data info
@@ -95,33 +67,6 @@ class QtryBasicInfoOutput(ctypes.Structure):
     ('burnedAmount', ctypes.c_uint64),
     ('gameOperator', ctypes.c_uint8 * 32)
     ]
-
-# Function to fill the array with the ASCII values of the string characters
-def fill_array_from_string(ctypes_array, string, start_index):
-    for i, char in enumerate(string):
-        ctypes_array[start_index + i] = ord(char)
-
-def pack_date_to_4uint8(s):
-    # Extract the day part of the string (first two characters)
-    date_str = s.split('-')
-
-    result = (ctypes.c_uint8 * 4)()
-    result[0] = int(date_str[0])
-    result[1] = int(date_str[1])
-    result[2] = int(date_str[2])
-    result[3] = 0
-    return result
-
-def pack_time_to_4uint8(s):
-    # Extract the day part of the string (first two characters)
-    date_str = s.split(':')
-
-    result = (ctypes.c_uint8 * 4)()
-    result[0] = int(date_str[0])
-    result[1] = int(date_str[1])
-    result[2] = int(date_str[2])
-    result[3] = 0
-    return result
 
 class QuotteryCppWrapper:
     def __init__(self, libs, nodeIP, port, logName=''):
@@ -178,33 +123,6 @@ class QuotteryCppWrapper:
             ctypes.c_int,
             ctypes.POINTER(BetInfoOutput)]
         self.quottery_cpp_func.quotteryWrapperGetBetInfo.restype = ctypes.c_int
-
-        # Join a bet
-        self.quottery_cpp_func.quotteryWrapperJoinBet.argtypes = [
-            ctypes.c_char_p,
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_uint32,
-            ctypes.c_int,
-            ctypes.c_uint64,
-            ctypes.c_uint8,
-            ctypes.c_uint32,
-            ctypes.c_char_p,
-            ctypes.POINTER(ctypes.c_uint32)
-        ]
-        self.quottery_cpp_func.quotteryWrapperJoinBet.restype = ctypes.c_int
-
-        # Add a bet
-        self.quottery_cpp_func.quotteryWrapperIssueBet.argtypes = [
-            ctypes.c_char_p,
-            ctypes.c_int,
-            ctypes.c_char_p,
-            QuotteryissueBetInput,
-            ctypes.c_uint32,
-            ctypes.c_char_p,
-            ctypes.POINTER(ctypes.c_uint32)
-        ]
-        self.quottery_cpp_func.quotteryWrapperIssueBet.restype = ctypes.c_int
 
     def get_qtry_basic_info(self):
         basic_info = {}
@@ -404,90 +322,4 @@ class QuotteryCppWrapper:
 
         return (sts, activeBets)
 
-    def join_bet(self, betInfo):
-        # Transaction related
-        tx_tick = (ctypes.c_uint32)()
-        tx_hash = ctypes.create_string_buffer(60)
 
-        sts = self.quottery_cpp_func.quotteryWrapperJoinBet(
-            self.nodeIP.encode('utf-8'),
-            self.port,
-            betInfo['seed'].encode('utf-8'),
-            betInfo['bet_id'],
-            betInfo['num_slots'],
-            betInfo['amount_per_slot'],
-            betInfo['option_id'],
-            self.scheduleTickOffset,
-            tx_hash,
-            ctypes.pointer(tx_tick))
-        if  sts!= 0:
-            self.logger.warning('Join bet failed!')
-            tx_tick = 0
-            tx_hash = "0"
-
-        return (tx_hash.value.decode('utf-8'), int(tx_tick.value))
-
-    # TODO: verify the time
-    def add_bet(self, betInfo):
-        qt_input_bet = QuotteryissueBetInput()
-
-        # Place holder for the time.
-        if not 'close_time' in betInfo:
-            betInfo['close_time'] = DEFAULT_END_HHMMSS
-        if not 'end_time' in betInfo:
-            betInfo['end_time'] = DEFAULT_END_HHMMSS
-
-        # Bet decription
-        qt_input_bet.betDesc = (ctypes.c_uint8 * 32)(*
-                                                     bytearray(betInfo['bet_desc'].encode('utf-8')))
-
-        # Bet options
-        qt_input_bet.numberOfOption = ctypes.c_uint32(betInfo['no_ops'])
-        qt_input_bet.optionDesc = (ctypes.c_uint8 * 256)()
-        for i in range(betInfo["no_ops"]):
-            fill_array_from_string(
-                qt_input_bet.optionDesc, betInfo["option_desc"][i], i * 32)
-
-        # Serialize all Oracles ID and convert it to public key.
-        num_of_oracles = len(betInfo["oracle_id"])
-        if num_of_oracles > 8:
-            self.logger.warning("Too much of Oracles. Expect 8 and belows")
-        num_of_oracles = min(num_of_oracles, 8)
-        qt_input_bet.oracleProviderId = (ctypes.c_uint8 * 256)()
-        qt_input_bet.oracleFees = (ctypes.c_uint32 * 8)()
-
-        for i in range(0, num_of_oracles):
-            # Pack the oracle ID
-            offset = 32 * i
-            oracle_id_public_key = ctypes.cast(ctypes.addressof(
-                qt_input_bet.oracleProviderId) + offset, ctypes.POINTER(ctypes.c_uint8))
-            oracle_id = betInfo["oracle_id"][i]
-            self.quottery_cpp_func.getPublicKeyFromIdentityWrapper(
-                oracle_id.encode('utf-8'), oracle_id_public_key)
-            qt_input_bet.oracleFees[i] = int(betInfo["oracle_fee"][i].replace('.', ''))
-
-        qt_input_bet.closeDate = pack_date_to_4uint8(betInfo['close_date'])
-        qt_input_bet.endDate = pack_date_to_4uint8(betInfo['end_date'])
-
-        qt_input_bet.closeTime = pack_time_to_4uint8(betInfo['close_time'])
-        qt_input_bet.endTime = pack_time_to_4uint8(betInfo['end_time'])
-
-        qt_input_bet.amountPerSlot = ctypes.c_uint64(
-            int(betInfo['amount_per_bet_slot']))
-        qt_input_bet.maxBetSlotPerOption = ctypes.c_uint32(
-            int(betInfo['max_slot_per_option']))
-
-        # Transaction related
-        tx_tick = (ctypes.c_uint32)()
-        tx_hash = ctypes.create_string_buffer(60)
-
-        # Issue the bet
-        sts = self.quottery_cpp_func.quotteryWrapperIssueBet(self.nodeIP.encode(
-            'utf-8'), self.port, betInfo['seed'].encode('utf-8'), qt_input_bet, self.scheduleTickOffset, tx_hash, ctypes.pointer(tx_tick))
-
-        if  sts!= 0:
-            self.logger.warning('Add bet failed!')
-            tx_tick = 0
-            tx_hash = "0"
-
-        return (tx_hash.value.decode('utf-8'), int(tx_tick.value))
