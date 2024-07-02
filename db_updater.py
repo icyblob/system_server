@@ -7,6 +7,8 @@ from threading import Thread
 import time
 from datetime import datetime, timezone
 import argparse
+from packaging.version import parse as parse_version
+import shutil
 import logging
 
 log_format = '[%(name)s][%(asctime)s] %(message)s'
@@ -17,6 +19,8 @@ logging.basicConfig(level=logging.INFO, format=log_format)
 logger = logging.getLogger('DB_UPDATER')
 
 # Init default parameters
+# DB version
+DB_VERSION = "1.0"
 NODE_IP = None
 NODE_PORT = None
 DATABASE_PATH = "."
@@ -27,10 +31,19 @@ qt = None
 DATABASE_FILE = 'database.db'
 UPDATE_INTERVAL = 3  # seconds
 
-
-def init_db():
+# Create db file
+def create_db_file():
     conn = sqlite3.connect(DATABASE_FILE)
     cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS version (
+            version_info TEXT PRIMARY KEY)'''
+    )
+    # Insert or update the version information
+    cursor.execute('''
+    INSERT INTO version (version_info) VALUES (?);
+    ''', (DB_VERSION,))
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS quottery_info (
             bet_id INTEGER PRIMARY KEY,
@@ -96,6 +109,100 @@ def init_db():
     ''')
     conn.commit()
     conn.close()
+
+# Update from unversion to 1.0
+def update_db_unversion():
+    update_version = "1.0"
+
+    # Connect to your SQLite database
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+
+    # Create a table for versioning if it doesn't exist
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS version (
+            version_info TEXT PRIMARY KEY)''')
+
+    # Insert or update the version information# 
+    cursor.execute('''
+    INSERT INTO version (version_info) VALUES (?);
+    ''', (update_version,))
+
+    # Rename the fee per day to fee per house. Also this will invalidate the fee per day
+    cursor.execute(f"ALTER TABLE node_basic_info RENAME COLUMN fee_per_slot_per_day TO fee_per_slot_per_hour ;")
+    # Mark the values in 'fee_per_slot_per_hour' as invalid
+    cursor.execute('''
+        UPDATE node_basic_info SET fee_per_slot_per_hour = 0;
+    ''')
+
+    conn.commit()
+    conn.close()
+    
+# Function that check if we need to convert the old version to new version of table
+# Only have ability update version gradually. Can not jump from a very old version
+def update_db():
+    # Check the existed db with current db in code
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+
+    # Check if a version table exists
+    table_name = 'version'
+    cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';")
+    table_exists = cursor.fetchone() is not None
+    need_update = not table_exists
+
+    field_exists = False;
+    if table_exists:
+        field_name = 'version_info'
+        cursor.execute(f"PRAGMA table_info({table_name});")
+        fields = [info[1] for info in cursor.fetchall()]
+        field_exists = field_name in fields
+        if field_exists:
+            cursor.execute('SELECT version_info FROM version;')
+            # Fetch the result
+            version_info = cursor.fetchone()[0]    
+            if parse_version(DB_VERSION) == parse_version(version_info):
+                need_update = False
+            else:
+                need_update = True
+        else:
+            need_update = True 
+    conn.close()
+
+    # Unversion bump to 1.0
+    if need_update:
+        logger.info(f"Version is mismatched")
+
+        # Update from unversion to 1.0
+        if not field_exists:
+            logger.info(f"Updating from unversion db to 1.0 ...")
+            
+            # Back up the database file
+            timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+            # New file name with the timestamp
+            backupfile = f"{DATABASE_FILE.split('.')[0]}_v00_bk_{timestamp}.db"
+            # Copy the original file to the new file
+            shutil.copyfile(DATABASE_FILE, backupfile)
+
+            update_db_unversion()
+        else: # Add more update logic
+            logger.error(f"Can not update from unversion db to 1.0")
+            sys.exit(1)
+
+        # Update from other version happend sequential here if neccessary
+        
+        logger.info(f"Update db version successfully. Current version {DB_VERSION}")
+    else:
+        logger.info(f"Version is matched. Skip the update.")
+
+
+def init_db():
+    if os.path.exists(DATABASE_FILE):
+        logger.info("Database file found. Checking version and update if neccessary.")
+        update_db()
+    else:
+        logger.info("No database file found. Create a new one.")
+        create_db_file()
 
 def get_qtry_basic_info_from_node():
     # Connect to the node and get current basic info of qtry
