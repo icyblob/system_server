@@ -5,6 +5,13 @@
 extern "C"
 {
 
+enum WrapperStatus
+{
+    SUCCESS = 0,
+    ERROR = 1,
+    NO_INFO = 2
+};
+
 struct BetInfoOutput
 {
     // meta data info
@@ -51,6 +58,12 @@ struct QuotteryBasicInfoOutput
     uint8_t gameOperator[32];
 };
 
+struct QuotteryBetOptionDetail
+{
+    uint8_t bettor[32 * 1024];
+    uint32_t bettorAmountOfSlots[1024];
+};
+
 // Get quottery basic information
 int quotteryWrapperGetBasicInfo(const char* nodeIp, const int nodePort, QuotteryBasicInfoOutput& result);
 
@@ -70,4 +83,14 @@ int quotteryWrapperGetBetInfo(
     const int nodePort,
     int betId,
     BetInfoOutput& result);
+
+// Get the options detail of a bet
+int quotteryWrapperBetOptionDetail(
+    const char* nodeIp,
+    const int nodePort,
+    uint32_t betId,
+    uint32_t betOption,
+    uint32_t& numberOfUsers,
+    QuotteryBetOptionDetail& result);
 }
+
