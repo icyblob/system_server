@@ -16,6 +16,8 @@ services:
     command: ["python3", "db_updater.py"]
     restart: always
   flask-app:
+    depends_on:
+      - db-updater
     # Change the path to suitable Docker image
     image: "ghcr.io/icyblob/flask-app:latest"
     ports:
