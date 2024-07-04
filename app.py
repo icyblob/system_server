@@ -24,8 +24,8 @@ NODE_PORT = None
 DATABASE_PATH = "."
 DATABASE_FILE = 'database.db'
 
-@app.route('/get_active_bets', methods=['GET'])
-def get_active_bets():
+@app.route('/get_bets', methods=['GET'])
+def get_bets():
 
     if not os.path.isfile(DATABASE_FILE):
         logger.warning(f"No database find ${DATABASE_FILE}. Please wait...")
@@ -52,6 +52,61 @@ def get_active_bets():
 
     ret = {
         'bet_list': bets_list,
+        'node_info': node_info
+    }
+
+    # Reply with json
+    return jsonify(ret)
+
+@app.route('/get_active_bets', methods=['GET'])
+def get_active_bets():
+
+    if not os.path.isfile(DATABASE_FILE):
+        logger.warning(f"No database find ${DATABASE_FILE}. Please wait...")
+        return jsonify({'bet_list': [], 'node_info': []})
+
+    conn = sqlite3.connect(DATABASE_FILE)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM quottery_info')
+    rows = cursor.fetchall()
+    conn.close()
+
+    # Convert rows to a list of dictionaries
+    bets_list = [dict(row) for row in rows]
+
+    conn = sqlite3.connect(DATABASE_FILE)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM node_basic_info')
+    node_basic_info_rows = cursor.fetchall()
+    conn.close()
+
+    node_info = [dict(row) for row in node_basic_info_rows]
+
+    # Active bet is the bet that doesn't have the result
+    filtered_bets = bets_list
+    filtered_bets = list(filter(lambda p: p['result'] < 0, filtered_bets))
+
+    # Check the closed date and close time
+    current_utc_date = datetime.now(timezone.utc)
+    active_bets = []
+    for bet in filtered_bets:
+        active_flag = True
+        # Combine the date and time strings and parse them into a datetime object
+        closed_datetime_str = bet['close_date'] + ' ' + bet['close_time']
+        try:
+            closed_datetime = datetime.strptime(closed_datetime_str, '%y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
+            active_flag = closed_datetime > current_utc_date
+        except Exception as e:
+            logger.warning(f"Date time format is not correct. Will not use for filtering active/inactive: {e}")
+
+        if active_flag:
+            active_bets.append(bet)
+
+
+    ret = {
+        'bet_list': active_bets,
         'node_info': node_info
     }
 
