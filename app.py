@@ -24,6 +24,23 @@ NODE_PORT = None
 DATABASE_PATH = "."
 DATABASE_FILE = 'database.db'
 
+PAGINATIONS_FILTER = [
+    "bet_id",
+    "close_date",
+    "creator",
+    "end_date",
+    "max_slot_per_option",
+    "no_ops",
+    "no_options",
+    "open_date",
+    "option_desc",
+    "result",
+    "status",
+    # list
+    "oracle_id",
+    "bet_desc"
+]
+
 @app.route('/get_active_bets', methods=['GET'])
 def get_active_bets():
 
@@ -48,11 +65,24 @@ def get_active_bets():
     node_basic_info_rows = cursor.fetchall()
     conn.close()
 
+    filtered_bets = bets_list
+
     node_info = [dict(row) for row in node_basic_info_rows]
 
+    # Filtering options
+    for pagin in PAGINATIONS_FILTER:
+        pagin_filter = request.args.get(pagin)
+        if pagin_filter:
+            # This only check for containing
+            if pagin == 'bet_desc' or pagin == 'oracle_id':
+                filtered_bets = list(filter(lambda p: pagin_filter in p[pagin], filtered_bets))
+            else: # Check for match all
+                filtered_bets = list(filter(lambda p: p[pagin] == pagin_filter, filtered_bets))
+
     ret = {
-        'bet_list': bets_list,
-        'node_info': node_info
+        'bet_list': list(filtered_bets),
+        'node_info': node_info,
+        'paginations' : PAGINATIONS_FILTER
     }
 
     # Reply with json
