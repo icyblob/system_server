@@ -41,6 +41,18 @@ PAGINATIONS_FILTER = [
     "bet_desc"
 ]
 
+def filter_pagination(bets_list):
+    filtered_bets = bets_list
+    for pagin in PAGINATIONS_FILTER:
+        pagin_filter = request.args.get(pagin)
+        if pagin_filter:
+            # This only check for containing
+            if pagin == 'bet_desc' or pagin == 'oracle_id':
+                filtered_bets = list(filter(lambda p: pagin_filter in p[pagin], filtered_bets))
+            else: # Check for match all
+                filtered_bets = list(filter(lambda p: p[pagin] == pagin_filter, filtered_bets))
+    return filtered_bets
+
 @app.route('/get_active_bets', methods=['GET'])
 def get_active_bets():
 
@@ -65,22 +77,12 @@ def get_active_bets():
     node_basic_info_rows = cursor.fetchall()
     conn.close()
 
-    filtered_bets = bets_list
-
     node_info = [dict(row) for row in node_basic_info_rows]
 
-    # Filtering options
-    for pagin in PAGINATIONS_FILTER:
-        pagin_filter = request.args.get(pagin)
-        if pagin_filter:
-            # This only check for containing
-            if pagin == 'bet_desc' or pagin == 'oracle_id':
-                filtered_bets = list(filter(lambda p: pagin_filter in p[pagin], filtered_bets))
-            else: # Check for match all
-                filtered_bets = list(filter(lambda p: p[pagin] == pagin_filter, filtered_bets))
+    filtered_bets = filter_pagination(bets_list)
 
     ret = {
-        'bet_list': list(filtered_bets),
+        'bet_list': filtered_bets,
         'node_info': node_info,
         'paginations' : PAGINATIONS_FILTER
     }
