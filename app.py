@@ -3,8 +3,8 @@ import logging
 import sqlite3
 
 from flask_cors import CORS
-from flask import Flask, jsonify
 from datetime import datetime, timezone
+from flask import Flask, request, jsonify
 
 log_format = '[%(name)s][%(asctime)s] %(message)s'
 # Configure the logging module to use the custom format
@@ -21,11 +21,47 @@ NODE_IP = None
 NODE_PORT = None
 DATABASE_PATH = "."
 DATABASE_FILE = 'database.db'
+PAGINATION_THRESHOLD = 10
+
+PAGINATIONS_FILTER = [
+    "bet_id",
+    "close_date",
+    "creator",
+    "end_date",
+    "max_slot_per_option",
+    "no_ops",
+    "no_options",
+    "open_date",
+    "option_desc",
+    "result",
+    "status",
+    "oracle_id",
+    "bet_desc"
+]
+
+
+def filter_pagination(bets_list, page, page_size):
+    filtered_bets = bets_list
+    for pagin in PAGINATIONS_FILTER:
+        pagin_filter = request.args.get(pagin)
+        if pagin_filter:
+            # This only checks for containing
+            if pagin == 'bet_desc' or pagin == 'oracle_id':
+                filtered_bets = list(filter(lambda p: pagin_filter in p[pagin], filtered_bets))
+            else:  # Check for match all
+                filtered_bets = list(filter(lambda p: p[pagin] == pagin_filter, filtered_bets))
+
+    # Pagination
+    start = (page - 1) * page_size
+    end = start + page_size
+    paginated_bets = filtered_bets[start:end]
+
+    return paginated_bets, len(filtered_bets)
 
 
 def get_bets_base():
     if not os.path.isfile(DATABASE_FILE):
-        logger.warning(f"No database find ${DATABASE_FILE}. Please wait...")
+        logger.warning(f"No database found {DATABASE_FILE}. Please wait...")
         return jsonify({'bet_list': [], 'node_info': []})
 
     conn = sqlite3.connect(DATABASE_FILE)
@@ -52,8 +88,7 @@ def get_bets_base():
 
 def filter_active_bets(bets_list):
     # Active bet is the bet that doesn't have the result
-    filtered_bets = bets_list
-    filtered_bets = list(filter(lambda p: p['result'] < 0, filtered_bets))
+    filtered_bets = list(filter(lambda p: p['result'] < 0, bets_list))
 
     # Check the closed date and close time
     current_utc_date = datetime.now(timezone.utc)
@@ -98,8 +133,7 @@ def filter_locked_bets(bets_list):
 
 def filter_inactive_bets(bets_list):
     # Inactive bet is a bet that has result
-    filtered_bets = bets_list
-    filtered_bets = list(filter(lambda p: p['result'] >= 0, filtered_bets))
+    filtered_bets = list(filter(lambda p: p['result'] >= 0, bets_list))
 
     # Check the end date and close time
     current_utc_date = datetime.now(timezone.utc)
@@ -124,10 +158,35 @@ def filter_inactive_bets(bets_list):
 def get_all_bets():
     bets_list, node_info = get_bets_base()
 
-    ret = {
-        'bet_list': bets_list,
-        'node_info': node_info
-    }
+    # Get pagination parameters
+    page = int(request.args.get('page', 1))
+    page_size = int(request.args.get('page_size', 10))
+
+    if len(bets_list) > PAGINATION_THRESHOLD:
+        filtered_bets, total_records = filter_pagination(bets_list, page, page_size)
+        ret = {
+            'bet_list': filtered_bets,
+            'node_info': node_info,
+            'paginations': PAGINATIONS_FILTER,
+            'page': {
+                "total_records": len(bets_list),
+                "current_page": page,
+                "page_size": page_size,
+                "total_pages": (total_records + page_size - 1) // page_size  # Calculate total pages
+            }
+        }
+    else:
+        ret = {
+            'bet_list': bets_list,
+            'node_info': node_info,
+            'paginations': PAGINATIONS_FILTER,
+            'page': {
+                "total_records": len(bets_list),
+                "current_page": 1,
+                "page_size": len(bets_list),
+                "total_pages": 1
+            }
+        }
 
     # Reply with json
     return jsonify(ret)
@@ -137,12 +196,35 @@ def get_all_bets():
 def get_active_bets():
     bets_list, node_info = get_bets_base()
 
+    # Get pagination parameters
+    page = int(request.args.get('page', 1))
+    page_size = int(request.args.get('page_size', 10))
+
     active_bets = filter_active_bets(bets_list=bets_list)
 
-    ret = {
-        'bet_list': active_bets,
-        'node_info': node_info
-    }
+    if len(active_bets) > PAGINATION_THRESHOLD:
+        paginated_bets, total_records = filter_pagination(active_bets, page, page_size)
+        ret = {
+            'bet_list': paginated_bets,
+            'node_info': node_info,
+            'page': {
+                "total_records": total_records,
+                "current_page": page,
+                "page_size": page_size,
+                "total_pages": (total_records + page_size - 1) // page_size  # Calculate total pages
+            }
+        }
+    else:
+        ret = {
+            'bet_list': active_bets,
+            'node_info': node_info,
+            'page': {
+                "total_records": len(active_bets),
+                "current_page": 1,
+                "page_size": len(active_bets),
+                "total_pages": 1
+            }
+        }
 
     # Reply with json
     return jsonify(ret)
@@ -152,12 +234,35 @@ def get_active_bets():
 def get_locked_bets():
     bets_list, node_info = get_bets_base()
 
+    # Get pagination parameters
+    page = int(request.args.get('page', 1))
+    page_size = int(request.args.get('page_size', 10))
+
     locked_bets = filter_locked_bets(bets_list=bets_list)
 
-    ret = {
-        'bet_list': locked_bets,
-        'node_info': node_info
-    }
+    if len(locked_bets) > PAGINATION_THRESHOLD:
+        paginated_bets, total_records = filter_pagination(locked_bets, page, page_size)
+        ret = {
+            'bet_list': paginated_bets,
+            'node_info': node_info,
+            'page': {
+                "total_records": total_records,
+                "current_page": page,
+                "page_size": page_size,
+                "total_pages": (total_records + page_size - 1) // page_size  # Calculate total pages
+            }
+        }
+    else:
+        ret = {
+            'bet_list': locked_bets,
+            'node_info': node_info,
+            'page': {
+                "total_records": len(locked_bets),
+                "current_page": 1,
+                "page_size": len(locked_bets),
+                "total_pages": 1
+            }
+        }
 
     # Reply with json
     return jsonify(ret)
@@ -167,12 +272,35 @@ def get_locked_bets():
 def get_inactive_bets():
     bets_list, node_info = get_bets_base()
 
+    # Get pagination parameters
+    page = int(request.args.get('page', 1))
+    page_size = int(request.args.get('page_size', 10))
+
     inactive_bets = filter_inactive_bets(bets_list=bets_list)
 
-    ret = {
-        'bet_list': inactive_bets,
-        'node_info': node_info
-    }
+    if len(inactive_bets) > PAGINATION_THRESHOLD:
+        paginated_bets, total_records = filter_pagination(inactive_bets, page, page_size)
+        ret = {
+            'bet_list': paginated_bets,
+            'node_info': node_info,
+            'page': {
+                "total_records": total_records,
+                "current_page": page,
+                "page_size": page_size,
+                "total_pages": (total_records + page_size - 1) // page_size  # Calculate total pages
+            }
+        }
+    else:
+        ret = {
+            'bet_list': inactive_bets,
+            'node_info': node_info,
+            'page': {
+                "total_records": len(inactive_bets),
+                "current_page": 1,
+                "page_size": len(inactive_bets),
+                "total_pages": 1
+            }
+        }
 
     # Reply with json
     return jsonify(ret)
@@ -191,11 +319,15 @@ if __name__ == '__main__':
 
     DATABASE_FILE = os.path.join(DATABASE_PATH, DATABASE_FILE)
 
+    PAGINATION_THRESHOLD = int(os.getenv('PAGINATION_THRESHOLD',
+                                         PAGINATION_THRESHOLD))  # Default threshold for pagination
+
     # Print the configuration to verify
     logger.info("Launch the flask app with configurations")
     logger.info(f"- App port: {APP_PORT}")
     logger.info(f"- Database read location: {DATABASE_FILE}")
     logger.info(f"- Debug mode: {DEBUG_MODE}")
+    logger.info(f"- Pagination threshold: {PAGINATION_THRESHOLD}")
 
     # Insert the ssl crt and key here
     ssl_context = (os.getenv('CERT_PATH'), os.getenv('CERT_KEY_PATH'))
