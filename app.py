@@ -59,7 +59,7 @@ def filter_active_bets(bets_list):
     current_utc_date = datetime.now(timezone.utc)
     active_bets = []
     for bet in filtered_bets:
-        active_flag = True
+        active_flag = False
         # Combine the date and time strings and parse them into a datetime object
         closed_datetime_str = bet['close_date'] + ' ' + bet['close_time']
         try:
@@ -79,7 +79,7 @@ def filter_locked_bets(bets_list):
     current_utc_date = datetime.now(timezone.utc)
     locked_bets = []
     for bet in bets_list:
-        locked_flag = True
+        locked_flag = False
         closed_datetime_str = bet['close_date'] + ' ' + bet['close_time']
         end_datetime_str = bet['end_date'] + ' ' + bet['end_time']
 
@@ -101,7 +101,7 @@ def filter_inactive_bets(bets_list):
     current_utc_date = datetime.now(timezone.utc)
     inactive_bets = []
     for bet in bets_list:
-        inactive_flag = True
+        inactive_flag = False
         end_datetime_str = bet['end_date'] + ' ' + bet['end_time']
 
         try:
