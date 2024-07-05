@@ -97,10 +97,14 @@ def filter_locked_bets(bets_list):
 
 
 def filter_inactive_bets(bets_list):
+    # Inactive bet is a bet that has result
+    filtered_bets = bets_list
+    filtered_bets = list(filter(lambda p: p['result'] >= 0, filtered_bets))
+
     # Check the end date and close time
     current_utc_date = datetime.now(timezone.utc)
     inactive_bets = []
-    for bet in bets_list:
+    for bet in filtered_bets:
         inactive_flag = False
         end_datetime_str = bet['end_date'] + ' ' + bet['end_time']
 
