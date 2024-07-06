@@ -21,7 +21,7 @@ NODE_IP = None
 NODE_PORT = None
 DATABASE_PATH = "."
 DATABASE_FILE = 'database.db'
-PAGINATION_THRESHOLD = 10
+PAGINATION_THRESHOLD = 100
 
 PAGINATIONS_FILTER = [
     "bet_id",
@@ -61,7 +61,7 @@ def filter_pagination(bets_list, page, page_size):
 
 def get_bets_base():
     if not os.path.isfile(DATABASE_FILE):
-        logger.warning(f"No database found {DATABASE_FILE}. Please wait...")
+        logger.warning(f"No database found at {DATABASE_FILE}. Please wait...")
         return jsonify({'bet_list': [], 'node_info': []})
 
     conn = sqlite3.connect(DATABASE_FILE)
@@ -160,9 +160,10 @@ def get_all_bets():
 
     # Get pagination parameters
     page = int(request.args.get('page', 1))
-    page_size = int(request.args.get('page_size', 10))
+    page_size = int(request.args.get('page_size', PAGINATION_THRESHOLD))
 
     if len(bets_list) > PAGINATION_THRESHOLD:
+        print('a')
         filtered_bets, total_records = filter_pagination(bets_list, page, page_size)
         ret = {
             'bet_list': filtered_bets,
@@ -176,6 +177,7 @@ def get_all_bets():
             }
         }
     else:
+        print('b')
         ret = {
             'bet_list': bets_list,
             'node_info': node_info,
@@ -198,7 +200,7 @@ def get_active_bets():
 
     # Get pagination parameters
     page = int(request.args.get('page', 1))
-    page_size = int(request.args.get('page_size', 10))
+    page_size = int(request.args.get('page_size', PAGINATION_THRESHOLD))
 
     active_bets = filter_active_bets(bets_list=bets_list)
 
@@ -236,7 +238,7 @@ def get_locked_bets():
 
     # Get pagination parameters
     page = int(request.args.get('page', 1))
-    page_size = int(request.args.get('page_size', 10))
+    page_size = int(request.args.get('page_size', PAGINATION_THRESHOLD))
 
     locked_bets = filter_locked_bets(bets_list=bets_list)
 
@@ -274,7 +276,7 @@ def get_inactive_bets():
 
     # Get pagination parameters
     page = int(request.args.get('page', 1))
-    page_size = int(request.args.get('page_size', 10))
+    page_size = int(request.args.get('page_size', PAGINATION_THRESHOLD))
 
     inactive_bets = filter_inactive_bets(bets_list=bets_list)
 
