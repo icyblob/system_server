@@ -133,12 +133,12 @@ def filter_locked_bets(bets_list):
 
 def filter_inactive_bets(bets_list):
     # Inactive bet is a bet that has result
-    filtered_bets = list(filter(lambda p: p['result'] >= 0, bets_list))
+    inactive_bets_results = list(filter(lambda p: p['result'] >= 0, bets_list))
 
     # Check the end date and close time
     current_utc_date = datetime.now(timezone.utc)
-    inactive_bets = []
-    for bet in filtered_bets:
+    inactive_bets_datetime = []
+    for bet in bets_list:
         inactive_flag = False
         end_datetime_str = bet['end_date'] + ' ' + bet['end_time']
 
@@ -149,9 +149,9 @@ def filter_inactive_bets(bets_list):
             logger.warning(f"Date time format is not correct. Will not use for filtering active/inactive: {e}")
 
         if inactive_flag:
-            inactive_bets.append(bet)
+            inactive_bets_datetime.append(bet)
 
-    return inactive_bets
+    return inactive_bets_datetime + inactive_bets_results
 
 
 @app.route('/get_all_bets', methods=['GET'])
