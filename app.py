@@ -101,7 +101,6 @@ def apply_pagination(bets_list):
         paginated_bets = pagination_page(filtered_bets, page, page_size)
         ret = {
             'bet_list': paginated_bets,
-            'paginations': PAGINATIONS_FILTER,
             'page': {
                 "current_records" : len(paginated_bets),
                 "total_records": total_records,
@@ -113,7 +112,6 @@ def apply_pagination(bets_list):
     else:
         ret = {
             'bet_list': filtered_bets,
-            'paginations': PAGINATIONS_FILTER,
             'page': {
                 "current_records" : len(filtered_bets),
                 "total_records": len(filtered_bets),
@@ -280,6 +278,14 @@ def get_inactive_bets():
     # Reply with json
     return jsonify(ret)
 
+@app.route('/get_available_filters', methods=['GET'])
+def get_filter():
+
+    # Add the node info
+    ret = {'available_filters': PAGINATIONS_FILTER}
+
+    # Reply with json
+    return jsonify(ret)
 
 if __name__ == '__main__':
     # Init parameters with environment variables
