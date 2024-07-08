@@ -25,18 +25,38 @@ PAGINATION_THRESHOLD = 100
 
 PAGINATIONS_FILTER = [
     "bet_id",
+    "open_date",
+    "open_time",
     "close_date",
-    "creator",
+    "close_time",
     "end_date",
+    "end_time",
+    "creator",
     "max_slot_per_option",
+    "amount_per_bet_slot",
     "no_ops",
     "no_options",
-    "open_date",
     "option_desc",
     "result",
     "status",
     "oracle_id",
-    "bet_desc"
+    "bet_desc",
+    "oracle_vote"
+]
+
+# This filter apply for containing check
+CONTAINING_FILTER = [
+    "open_date",
+    "open_time",
+    "close_date",
+    "close_time",
+    "end_date",
+    "end_time",
+    "creator",
+    "option_desc",
+    "oracle_id",
+    "bet_desc",
+    "oracle_vote"
 ]
 
 
@@ -47,7 +67,7 @@ def pagination_filter(bets_list):
         pagin_filter = request.args.get(pagin)
         if pagin_filter:
             # This only checks for containing
-            if pagin == 'bet_desc' or pagin == 'oracle_id':
+            if pagin in CONTAINING_FILTER:
                 filtered_bets = list(filter(lambda p: pagin_filter in p[pagin], filtered_bets))
             else:  # Check for match all
                 filtered_bets = list(filter(lambda p: str(p[pagin]) == pagin_filter, filtered_bets))
