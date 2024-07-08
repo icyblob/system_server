@@ -40,7 +40,8 @@ PAGINATIONS_FILTER = [
 ]
 
 
-def filter_pagination(bets_list, page, page_size):
+def pagination_filter(bets_list):
+    
     filtered_bets = bets_list
     for pagin in PAGINATIONS_FILTER:
         pagin_filter = request.args.get(pagin)
@@ -51,13 +52,57 @@ def filter_pagination(bets_list, page, page_size):
             else:  # Check for match all
                 filtered_bets = list(filter(lambda p: p[pagin] == pagin_filter, filtered_bets))
 
+    return filtered_bets
+
+def pagination_page(bets_list, page, page_size):
+    
+    filtered_bets = bets_list
+
     # Pagination
     start = (page - 1) * page_size
     end = start + page_size
     paginated_bets = filtered_bets[start:end]
 
-    return paginated_bets, len(filtered_bets)
+    return paginated_bets
 
+# Get the data with pargination for the http request
+def apply_pagination(bets_list):
+   
+    # Get pagination parameters
+    page = int(request.args.get('page', 1))
+    page_size = int(request.args.get('page_size', PAGINATION_THRESHOLD))
+
+    # Filter
+    filtered_bets = pagination_filter(bets_list)
+
+    # Get the result with pagination
+    if len(filtered_bets) > page_size:
+        total_records = len(filtered_bets)
+        paginated_bets = pagination_page(filtered_bets, page, page_size)
+        ret = {
+            'bet_list': paginated_bets,
+            'paginations': PAGINATIONS_FILTER,
+            'page': {
+                "current_records" : len(paginated_bets),
+                "total_records": total_records,
+                "current_page": page,
+                "page_size": page_size,
+                "total_pages": (total_records + page_size - 1) // page_size  # Calculate total pages
+            }
+        }
+    else:
+        ret = {
+            'bet_list': filtered_bets,
+            'paginations': PAGINATIONS_FILTER,
+            'page': {
+                "current_records" : len(filtered_bets),
+                "total_records": len(filtered_bets),
+                "current_page": 1,
+                "page_size": len(filtered_bets),
+                "total_pages": 1
+            }
+        }
+    return ret
 
 def get_bets_base():
     if not os.path.isfile(DATABASE_FILE):
@@ -158,37 +203,11 @@ def filter_inactive_bets(bets_list):
 def get_all_bets():
     bets_list, node_info = get_bets_base()
 
-    # Get pagination parameters
-    page = int(request.args.get('page', 1))
-    page_size = int(request.args.get('page_size', PAGINATION_THRESHOLD))
+    # Apply pagination
+    ret = apply_pagination(bets_list)
 
-    if len(bets_list) > PAGINATION_THRESHOLD:
-        print('a')
-        filtered_bets, total_records = filter_pagination(bets_list, page, page_size)
-        ret = {
-            'bet_list': filtered_bets,
-            'node_info': node_info,
-            'paginations': PAGINATIONS_FILTER,
-            'page': {
-                "total_records": len(bets_list),
-                "current_page": page,
-                "page_size": page_size,
-                "total_pages": (total_records + page_size - 1) // page_size  # Calculate total pages
-            }
-        }
-    else:
-        print('b')
-        ret = {
-            'bet_list': bets_list,
-            'node_info': node_info,
-            'paginations': PAGINATIONS_FILTER,
-            'page': {
-                "total_records": len(bets_list),
-                "current_page": 1,
-                "page_size": len(bets_list),
-                "total_pages": 1
-            }
-        }
+    # Add the node info
+    ret['node_info'] = node_info
 
     # Reply with json
     return jsonify(ret)
@@ -198,35 +217,13 @@ def get_all_bets():
 def get_active_bets():
     bets_list, node_info = get_bets_base()
 
-    # Get pagination parameters
-    page = int(request.args.get('page', 1))
-    page_size = int(request.args.get('page_size', PAGINATION_THRESHOLD))
-
     active_bets = filter_active_bets(bets_list=bets_list)
 
-    if len(active_bets) > PAGINATION_THRESHOLD:
-        paginated_bets, total_records = filter_pagination(active_bets, page, page_size)
-        ret = {
-            'bet_list': paginated_bets,
-            'node_info': node_info,
-            'page': {
-                "total_records": total_records,
-                "current_page": page,
-                "page_size": page_size,
-                "total_pages": (total_records + page_size - 1) // page_size  # Calculate total pages
-            }
-        }
-    else:
-        ret = {
-            'bet_list': active_bets,
-            'node_info': node_info,
-            'page': {
-                "total_records": len(active_bets),
-                "current_page": 1,
-                "page_size": len(active_bets),
-                "total_pages": 1
-            }
-        }
+    # Apply pagination
+    ret = apply_pagination(active_bets)
+
+    # Add the node info
+    ret['node_info'] = node_info
 
     # Reply with json
     return jsonify(ret)
@@ -236,35 +233,13 @@ def get_active_bets():
 def get_locked_bets():
     bets_list, node_info = get_bets_base()
 
-    # Get pagination parameters
-    page = int(request.args.get('page', 1))
-    page_size = int(request.args.get('page_size', PAGINATION_THRESHOLD))
-
     locked_bets = filter_locked_bets(bets_list=bets_list)
 
-    if len(locked_bets) > PAGINATION_THRESHOLD:
-        paginated_bets, total_records = filter_pagination(locked_bets, page, page_size)
-        ret = {
-            'bet_list': paginated_bets,
-            'node_info': node_info,
-            'page': {
-                "total_records": total_records,
-                "current_page": page,
-                "page_size": page_size,
-                "total_pages": (total_records + page_size - 1) // page_size  # Calculate total pages
-            }
-        }
-    else:
-        ret = {
-            'bet_list': locked_bets,
-            'node_info': node_info,
-            'page': {
-                "total_records": len(locked_bets),
-                "current_page": 1,
-                "page_size": len(locked_bets),
-                "total_pages": 1
-            }
-        }
+    # Apply pagination
+    ret = apply_pagination(locked_bets)
+
+    # Add the node info
+    ret['node_info'] = node_info
 
     # Reply with json
     return jsonify(ret)
@@ -274,35 +249,13 @@ def get_locked_bets():
 def get_inactive_bets():
     bets_list, node_info = get_bets_base()
 
-    # Get pagination parameters
-    page = int(request.args.get('page', 1))
-    page_size = int(request.args.get('page_size', PAGINATION_THRESHOLD))
-
     inactive_bets = filter_inactive_bets(bets_list=bets_list)
 
-    if len(inactive_bets) > PAGINATION_THRESHOLD:
-        paginated_bets, total_records = filter_pagination(inactive_bets, page, page_size)
-        ret = {
-            'bet_list': paginated_bets,
-            'node_info': node_info,
-            'page': {
-                "total_records": total_records,
-                "current_page": page,
-                "page_size": page_size,
-                "total_pages": (total_records + page_size - 1) // page_size  # Calculate total pages
-            }
-        }
-    else:
-        ret = {
-            'bet_list': inactive_bets,
-            'node_info': node_info,
-            'page': {
-                "total_records": len(inactive_bets),
-                "current_page": 1,
-                "page_size": len(inactive_bets),
-                "total_pages": 1
-            }
-        }
+    # Apply pagination
+    ret = apply_pagination(inactive_bets)
+
+    # Add the node info
+    ret['node_info'] = node_info
 
     # Reply with json
     return jsonify(ret)
