@@ -50,7 +50,7 @@ def filter_pagination(bets_list):
             if pagin == 'bet_desc' or pagin == 'oracle_id':
                 filtered_bets = list(filter(lambda p: pagin_filter in p[pagin], filtered_bets))
             else: # Check for match all
-                filtered_bets = list(filter(lambda p: p[pagin] == pagin_filter, filtered_bets))
+                filtered_bets = list(filter(lambda p: str(p[pagin]) == pagin_filter, filtered_bets))
     return filtered_bets
 
 @app.route('/get_active_bets', methods=['GET'])
