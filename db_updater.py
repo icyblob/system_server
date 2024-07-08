@@ -123,7 +123,7 @@ def update_db_unversion():
     CREATE TABLE IF NOT EXISTS version (
             version_info TEXT PRIMARY KEY)''')
 
-    # Insert or update the version information# 
+    # Insert or update the version information#
     cursor.execute('''
     INSERT INTO version (version_info) VALUES (?);
     ''', (update_version,))
@@ -137,7 +137,7 @@ def update_db_unversion():
 
     conn.commit()
     conn.close()
-    
+
 # Function that check if we need to convert the old version to new version of table
 # Only have ability update version gradually. Can not jump from a very old version
 def update_db():
@@ -160,13 +160,13 @@ def update_db():
         if field_exists:
             cursor.execute('SELECT version_info FROM version;')
             # Fetch the result
-            version_info = cursor.fetchone()[0]    
+            version_info = cursor.fetchone()[0]
             if parse_version(DB_VERSION) == parse_version(version_info):
                 need_update = False
             else:
                 need_update = True
         else:
-            need_update = True 
+            need_update = True
     conn.close()
 
     # Unversion bump to 1.0
@@ -176,7 +176,7 @@ def update_db():
         # Update from unversion to 1.0
         if not field_exists:
             logger.info(f"Updating from unversion db to 1.0 ...")
-            
+
             # Back up the database file
             timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
             # New file name with the timestamp
@@ -190,7 +190,7 @@ def update_db():
             sys.exit(1)
 
         # Update from other version happend sequential here if neccessary
-        
+
         logger.info(f"Update db version successfully. Current version {DB_VERSION}")
     else:
         logger.info(f"Version is matched. Skip the update.")
@@ -213,7 +213,7 @@ def get_qtry_basic_info_from_node():
         logger.warning(f"Error get active basic info of qtry from node: {e}")
         return 1, {}
 
-def fetch_active_bets_from_node():
+def fetch_bets_from_node():
     # Connect to the node and get current active bets
     try:
         sts, active_bets = qt.get_active_bets()
@@ -297,14 +297,14 @@ def update_betting_odds(conn, bet_id):
         cur.execute("UPDATE quottery_info SET betting_odds = ? WHERE bet_id = ?", (betting_odds_str, bet_id))
 
 
-def update_database_with_active_bets():
+def update_database_with_bets():
     while True:
         try:
-            sts, active_bets = fetch_active_bets_from_node()
+            sts, active_bets = fetch_bets_from_node()
 
-            # Verify the active_bets
+            # Verify the bets
             if not active_bets:
-                logger.warning('[WARNING] Active bets from node is empty! Display the local database')
+                logger.warning('[WARNING] Bets from node is empty! Using the local database')
 
             sts, qt_basic_info = get_qtry_basic_info_from_node()
             if not qt_basic_info:
@@ -495,4 +495,4 @@ if __name__ == '__main__':
     qt = quottery_cpp_wrapper.QuotteryCppWrapper(QUOTTERY_LIBS, NODE_IP, NODE_PORT, 'DB_UPDATER')
 
     init_db()
-    update_database_with_active_bets()
+    update_database_with_bets()
