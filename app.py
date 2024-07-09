@@ -217,6 +217,23 @@ def filter_inactive_bets(bets_list):
     return inactive_bets_datetime + inactive_bets_results
 
 
+def get_bet_options_detail():
+    if not os.path.isfile(DATABASE_FILE):
+        logger.warning(f"No database find ${DATABASE_FILE}. Please wait...")
+        return jsonify({'bets_options_detail': []})
+
+    conn = sqlite3.connect(DATABASE_FILE)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM bet_options_detail')
+    rows = cursor.fetchall()
+    conn.close()
+
+    # Convert rows to a list of dictionaries
+    bet_options_details_list = [dict(row) for row in rows]
+
+    return bet_options_details_list
+
 @app.route('/get_all_bets', methods=['GET'])
 def get_all_bets():
     bets_list, node_info = get_bets_base()
@@ -283,6 +300,17 @@ def get_filter():
 
     # Add the node info
     ret = {'available_filters': PAGINATIONS_FILTER}
+    # Reply with json
+    return jsonify(ret)
+
+@app.route('/get_bet_options_detail', methods=['GET'])
+def get_bet_options():
+    bet_options = get_bet_options_detail()
+    bet_options = apply_pagination(bet_options)
+
+    ret = {
+        'bet_options_detail': bet_options
+    }
 
     # Reply with json
     return jsonify(ret)

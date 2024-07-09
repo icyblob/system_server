@@ -20,7 +20,7 @@ logger = logging.getLogger('DB_UPDATER')
 
 # Init default parameters
 # DB version
-DB_VERSION = "1.0"
+DB_VERSION = "2.0"
 NODE_IP = None
 NODE_PORT = None
 DATABASE_PATH = "."
@@ -107,11 +107,21 @@ def create_db_file():
             PRIMARY KEY (ip, port)
         )
     ''')
+
+    # Update the bet detail option table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS bet_options_detail (
+            bet_id INTEGER,
+            option_id INTEGER,
+            user_slots TEXT,
+            PRIMARY KEY (bet_id, option_id)
+            )''')
+
     conn.commit()
     conn.close()
 
 # Update from unversion to 1.0
-def update_db_unversion():
+def update_db_unversion_10():
     update_version = "1.0"
 
     # Connect to your SQLite database
@@ -123,7 +133,7 @@ def update_db_unversion():
     CREATE TABLE IF NOT EXISTS version (
             version_info TEXT PRIMARY KEY)''')
 
-    # Insert or update the version information#
+    # Insert or update the version information
     cursor.execute('''
     INSERT INTO version (version_info) VALUES (?);
     ''', (update_version,))
@@ -138,12 +148,47 @@ def update_db_unversion():
     conn.commit()
     conn.close()
 
+# Update from unversion to 2.0
+def update_db_10_20():
+    update_version = "2.0"
+
+    # Connect to your SQLite database
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+
+    # Insert or update the version information
+    cursor.execute('''
+    UPDATE version SET version_info = ?;
+    ''', (update_version,))
+
+    # Update the bet detail option table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS bet_options_detail (
+            bet_id INTEGER,
+            option_id INTEGER,
+            user_slots TEXT,
+            PRIMARY KEY (bet_id, option_id)
+            )''')
+
+    conn.commit()
+    conn.close()
+
+def backup_db(version):
+    # Back up the database file
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    # New file name with the timestamp
+    backupfile = f"{DATABASE_FILE.split('.')[0]}_v{version}_bk_{timestamp}.db"
+    # Copy the original file to the new file
+    shutil.copyfile(DATABASE_FILE, backupfile)
+
 # Function that check if we need to convert the old version to new version of table
 # Only have ability update version gradually. Can not jump from a very old version
 def update_db():
     # Check the existed db with current db in code
     conn = sqlite3.connect(DATABASE_FILE)
     cursor = conn.cursor()
+
+    version_info = "unversion"
 
     # Check if a version table exists
     table_name = 'version'
@@ -169,27 +214,37 @@ def update_db():
             need_update = True
     conn.close()
 
-    # Unversion bump to 1.0
     if need_update:
-        logger.info(f"Version is mismatched")
+        logger.info(f"Version is mismatched current: %s vs supported: %s", version_info, DB_VERSION)
 
         # Update from unversion to 1.0
         if not field_exists:
             logger.info(f"Updating from unversion db to 1.0 ...")
 
             # Back up the database file
-            timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-            # New file name with the timestamp
-            backupfile = f"{DATABASE_FILE.split('.')[0]}_v00_bk_{timestamp}.db"
-            # Copy the original file to the new file
-            shutil.copyfile(DATABASE_FILE, backupfile)
+            backup_db("00")
 
-            update_db_unversion()
-        else: # Add more update logic
-            logger.error(f"Can not update from unversion db to 1.0")
-            sys.exit(1)
+            # Update the file
+            update_db_unversion_10()
+            version_info = "1.0"
+
+            logger.info(f"Updated db version to %s", version_info)
 
         # Update from other version happend sequential here if neccessary
+        if parse_version(version_info) < parse_version("2.0"):
+            logger.info(f"Updating from 1.0 db to 2.0 ...")
+
+            # Back up the database file
+            backup_db("10")
+
+            # Update the file
+            update_db_10_20()
+            version_info = "2.0"
+            logger.info(f"Updated db version to %s", version_info)
+
+        if parse_version(version_info) != parse_version(DB_VERSION):
+            logger.error(f"Can not update from db from %s to %s", version_info, DB_VERSION)
+            sys.exit(1)
 
         logger.info(f"Update db version successfully. Current version {DB_VERSION}")
     else:
@@ -214,12 +269,12 @@ def get_qtry_basic_info_from_node():
         return 1, {}
 
 def fetch_bets_from_node():
-    # Connect to the node and get current active bets
+    # Connect to the node and get all bets
     try:
-        sts, active_bets = qt.get_active_bets()
+        sts, active_bets = qt.get_all_bets()
         return (sts, active_bets)
     except Exception as e:
-        logger.warning(f"Error fetching active bets from node: {e}")
+        logger.warning(f"Error fetching bets from node: {e}")
         return (1, {})
 
 def get_bet_info_from_node(betId):
@@ -227,7 +282,7 @@ def get_bet_info_from_node(betId):
         sts, betInfo = qt.get_bet_info(betId)
         return (sts, betInfo)
     except Exception as e:
-        logger.warning(f"Error fetching active bets from node: {e}")
+        logger.warning(f"Error fetching bet info from node: {e}")
         return 1, {}
 
 def check_primary_key_exists(cursor, table_name, primary_key_column, primary_key_value):
@@ -300,6 +355,7 @@ def update_betting_odds(conn, bet_id):
 def update_database_with_bets():
     while True:
         try:
+            logger.info("Requesting data from node.")
             sts, active_bets = fetch_bets_from_node()
 
             # Verify the bets
@@ -433,12 +489,31 @@ def update_database_with_bets():
                     update_betting_odds(conn, key)
                     update_current_total_qus(conn, key)
 
+                    # Bet detail options
+                    number_of_options = active_bet['no_options']
+                    for op_id in range(0, number_of_options):
+                        sts, bet_option_detail = qt.get_bet_option_detail(active_bet['bet_id'], op_id)
+                        if bet_option_detail :
+                            #logger.info(f'Bet detail of bet %d options %d', active_bet['bet_id'], op_id)
+                            #logger.info(bet_option_detail)
+                            cursor.execute(f'''
+                                INSERT OR REPLACE INTO bet_options_detail (
+                                    bet_id,
+                                    option_id,
+                                    user_slots)
+                                VALUES (?, ?, ?)
+                                ''', (
+                                active_bet['bet_id'],
+                                op_id,
+                                json.dumps(bet_option_detail)
+                            ))
 
             inactive_bet_ids = set(db_bet_ids) - set(active_bet_ids)
             # Mark the old bet status as 0
             update_statement = 'UPDATE quottery_info SET status = 0 WHERE bet_id IN ({});'.format(
                 ','.join('?' for _ in inactive_bet_ids))
             cursor.execute(update_statement, list(inactive_bet_ids))
+
 
             conn.commit()
             conn.close()
