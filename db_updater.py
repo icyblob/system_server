@@ -69,6 +69,41 @@ def init_tick_info():
     conn.commit()
     conn.close()
 
+def init_node_basic_info():
+    # Connect to your SQLite database
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS node_basic_info (
+            ip TEXT,
+            port INTEGER,
+            fee_per_slot_per_hour INTEGER,
+            min_amount_per_slot INTEGER,
+            game_operator_fee REAL,
+            shareholders_fee REAL,
+            burn_fee REAL,
+            num_issued_bet INTEGER,
+            moneyflow INTEGER,
+            moneyflow_through_issuebet INTEGER,
+            moneyflow_through_joinbet INTEGER,
+            moneyflow_through_finalize INTEGER,
+            shareholders_earned_amount INTEGER,
+            shareholders_paid_amount INTEGER,
+            winners_earned_amount INTEGER,
+            distributed_amount INTEGER,
+            burned_amount INTEGER,
+            game_operator_id TEXT,
+            PRIMARY KEY (ip, port)
+        )
+    ''')
+
+    # There is an existed node ip. Remove it to make sure doesn't conflict with current node ip and port
+    cursor.execute(f'''DELETE FROM node_basic_info''')
+        
+    conn.commit()
+    conn.close()
+
 # Create db file
 def create_db_file():
     conn = sqlite3.connect(DATABASE_FILE)
@@ -119,30 +154,6 @@ def create_db_file():
             num_slots INTEGER NOT NULL,
             amount_per_slot REAL NOT NULL,
             FOREIGN KEY (bet_id) REFERENCES quottery_info(bet_id)
-        )
-    ''')
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS node_basic_info (
-            ip TEXT,
-            port INTEGER,
-            fee_per_slot_per_hour INTEGER,
-            min_amount_per_slot INTEGER,
-            game_operator_fee REAL,
-            shareholders_fee REAL,
-            burn_fee REAL,
-            num_issued_bet INTEGER,
-            moneyflow INTEGER,
-            moneyflow_through_issuebet INTEGER,
-            moneyflow_through_joinbet INTEGER,
-            moneyflow_through_finalize INTEGER,
-            shareholders_earned_amount INTEGER,
-            shareholders_paid_amount INTEGER,
-            winners_earned_amount INTEGER,
-            distributed_amount INTEGER,
-            burned_amount INTEGER,
-            game_operator_id TEXT,
-            PRIMARY KEY (ip, port)
         )
     ''')
 
@@ -325,6 +336,10 @@ def init_db():
     else:
         logger.info("No database file found. Create a new one.")
         create_db_file()
+
+    # Node basic information will depend on the node it connect to
+    # So it is better to clean it up to not mess up when we change the node
+    init_node_basic_info()
 
 def get_qtry_basic_info_from_node():
     # Connect to the node and get current basic info of qtry
