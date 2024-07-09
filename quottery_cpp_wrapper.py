@@ -6,6 +6,7 @@ import time
 
 
 class QuotteryFeesOutput(ctypes.Structure):
+    """Wrapper struct for accessing QuotteryFeesOutput in quottery_cpp library"""
     _fields_ = [
         ('feePerSlotPerDay', ctypes.c_uint64),  # Amount of qus
         ('gameOperatorFee', ctypes.c_uint64),  # Amount of qus
@@ -17,7 +18,7 @@ class QuotteryFeesOutput(ctypes.Structure):
     ]
 
 class BetInfoOutput(ctypes.Structure):
-    #     // meta data info
+    """Wrapper struct for accessing BetInfoOutput in quottery_cpp library"""
     _fields_ = [
         ('betId', ctypes.c_uint32),
         ('nOption', ctypes.c_uint32),  # options number
@@ -49,6 +50,7 @@ class BetInfoOutput(ctypes.Structure):
     ]
 
 class QtryBasicInfoOutput(ctypes.Structure):
+    """Wrapper struct for accessing QtryBasicInfoOutput in quottery_cpp library"""
     _fields_ = [
     ('feePerSlotPerHour', ctypes.c_uint64),  # Amount of qus
     ('gameOperatorFee', ctypes.c_uint64),  # 4 digit number ABCD means AB.CD% | 1234 is 12.34%
@@ -69,13 +71,22 @@ class QtryBasicInfoOutput(ctypes.Structure):
     ]
 
 class QtryBetOptionDetail(ctypes.Structure):
+    """Wrapper struct for accessing QtryBetOptionDetail in quottery_cpp library"""
     _fields_ = [
         ('bettor', ctypes.c_uint8 * 32768), # 32 * 1024
         ('amountOfSlots', ctypes.c_uint * 1024)
     ]
 
 class QuotteryCppWrapper:
+    """Class allow requesting data from node by calling C++ function in quottery_cpp library """
     def __init__(self, libs, nodeIP, port, logName=''):
+        """
+        Args:
+            libs (str): The full path to quottery_cpp library 
+            nodeIP (str): The IP of the node
+            port (int): The port of the node
+            logName (str, optional): The name of the logging, default is empty
+        """
 
         self.nodeIP = nodeIP
         self.port = port
@@ -146,6 +157,13 @@ class QuotteryCppWrapper:
         self.quottery_cpp_func.quotteryWrapperBetOptionDetail.restype = ctypes.c_int
 
     def get_qtry_basic_info(self):
+        """Gets the quottery basic information
+
+        Returns:
+            sts (int): status of request. 0 is success, otherwise is failure
+            dict: a dictionary that contain information about quottery basic information. If failure, it is empty
+        """
+        
         basic_info = {}
         qt_basic_info = QtryBasicInfoOutput()
         sts = self.quottery_cpp_func.quotteryWrapperGetBasicInfo(self.nodeIP.encode(
@@ -180,6 +198,15 @@ class QuotteryCppWrapper:
         return sts, basic_info
 
     def get_bet_info(self, betId):
+        """Gets the information of a specific bet
+        
+        Args:
+            betId (int): The ID of the bet
+
+        Returns:
+            sts (int): status of request. 0 is success, otherwise is failure
+            dict: a dictionary that contain information about bet information. If failure, it is empty
+        """
         bet_info = {}
 
          # Access the fields of the struct
@@ -277,6 +304,12 @@ class QuotteryCppWrapper:
         return (0, bet_info)
 
     def get_all_bets(self):
+        """Gets the information of all bet that respond from node
+
+        Returns:
+            sts (int): status of request. 0 is success, otherwise is failure
+            list: list of dictionary that contain information about all bet information. If failure, it is empty
+        """
 
         # Return bets dictionary
         activeBets ={}
@@ -360,6 +393,16 @@ class QuotteryCppWrapper:
         return (sts, activeBets, tick_number)
 
     def get_bet_option_detail(self, betID, betOption):
+        """Gets the detail of a specific bet and bet option
+        
+        Args:
+            betId (int): The ID of the bet
+            betOption (int): The option ID of this bet
+
+        Returns:
+            sts (int): status of request. 0 is success, otherwise is failure
+            dict: a dictionary that contain user id and the number of slots of this bet option. If failure, it is empty
+        """
 
         # Return users detail dictionary
         bet_option_detail = {}
