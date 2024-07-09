@@ -12,6 +12,7 @@ set(QUBIC_CLI_SRC
 add_library(${PROJECT_NAME} SHARED
             src/quottery_wrapper.cpp
             src/key_utils_wrapper.cpp
+            src/node_utils_wrapper.cpp
             ${QUBIC_CLI_SRC})
 target_include_directories(${PROJECT_NAME}
     PRIVATE

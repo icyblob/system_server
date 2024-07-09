@@ -104,6 +104,11 @@ class QuotteryCppWrapper:
             ctypes.POINTER(ctypes.c_uint8), ctypes.c_char_p]
         self.quottery_cpp_func.getIdentityFromPublicKeyWrapper.restype = ctypes.c_int
 
+        # Node utils functions: Get current tick number from node
+        self.quottery_cpp_func.getTickNumberFromNode.argtypes = [
+            ctypes.c_char_p, ctypes.c_int, ctypes.POINTER(ctypes.c_uint32)]
+        self.quottery_cpp_func.getTickNumberFromNode.restype = ctypes.c_int
+
         # Quottery basic information
         self.quottery_cpp_func.quotteryWrapperGetBasicInfo.argtypes = [
             ctypes.c_char_p, ctypes.c_int, ctypes.POINTER(QtryBasicInfoOutput)]
@@ -283,11 +288,13 @@ class QuotteryCppWrapper:
             'utf-8'), self.port, ctypes.pointer(numberOfActiveBets), arrayPointer)
         if sts:
             self.logger.warning('Get bets from node failed!')
-            return (sts, activeBets)
+            return (sts, activeBets, 0)
 
         bets_count = numberOfActiveBets.value
         self.logger.info("Node responds %d bets", bets_count)
 
+        # The number of bet that can get information from node
+        bet_info_count = 0
         # Process each active bet and recording it
         for i in range(0, bets_count):
             bet_id = arrayPointer[i]
@@ -336,7 +343,21 @@ class QuotteryCppWrapper:
             # Append the active bets
             activeBets[bet_info['bet_id']] = bet_info
 
-        return (sts, activeBets)
+            bet_info_count = bet_info_count + 1
+        
+        # Only report the tick number if all bets has been respond from node
+        tick_number = 0
+        if bet_info_count == bets_count:
+            # Get current tick number
+            current_tick_number = ctypes.c_uint32(0)
+            sts = self.quottery_cpp_func.getTickNumberFromNode(self.nodeIP.encode(
+                'utf-8'), self.port, ctypes.pointer(current_tick_number))
+            if sts:
+                self.logger.warning('Get current tick number failed!')
+            else:
+                tick_number = current_tick_number.value
+                
+        return (sts, activeBets, tick_number)
 
     def get_bet_option_detail(self, betID, betOption):
 

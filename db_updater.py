@@ -20,7 +20,7 @@ logger = logging.getLogger('DB_UPDATER')
 
 # Init default parameters
 # DB version
-DB_VERSION = "2.0"
+DB_VERSION = "2.1"
 NODE_IP = None
 NODE_PORT = None
 DATABASE_PATH = "."
@@ -30,6 +30,44 @@ qt = None
 
 DATABASE_FILE = 'database.db'
 UPDATE_INTERVAL = 3  # seconds
+
+def init_tick_info():
+    # Connect to your SQLite database
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+
+    # Update the bet detail option table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tick_info (
+            tick_number INTEGER,
+            epoch INTEGER,
+            tick_duration INTEGER,
+            number_of_aligned_votes INTEGER,
+            number_of_misaligned_votes INTEGER,
+            initial_tick INTEGER,
+            PRIMARY KEY (tick_number, epoch)   
+            )  
+            ''')
+    # Check if the row exists
+    cursor.execute("SELECT COUNT(*) FROM tick_info")
+    row_count = cursor.fetchone()[0]
+
+    if row_count == 0:
+        cursor.execute(
+            f'''INSERT INTO tick_info 
+            (tick_number, epoch, tick_duration, number_of_aligned_votes, number_of_misaligned_votes, initial_tick) 
+            VALUES  
+            (0, 0, 0, 0, 0, 0)''')
+    else:
+        cursor.execute(f'''UPDATE tick_info SET tick_number = 0''')
+        cursor.execute(f'''UPDATE tick_info SET epoch = 0''')
+        cursor.execute(f'''UPDATE tick_info SET tick_duration = 0''')
+        cursor.execute(f'''UPDATE tick_info SET number_of_aligned_votes = 0''')
+        cursor.execute(f'''UPDATE tick_info SET number_of_misaligned_votes = 0''')
+        cursor.execute(f'''UPDATE tick_info SET initial_tick = 0''')
+
+    conn.commit()
+    conn.close()
 
 # Create db file
 def create_db_file():
@@ -120,8 +158,10 @@ def create_db_file():
     conn.commit()
     conn.close()
 
+    init_tick_info()
+
 # Update from unversion to 1.0
-def update_db_unversion_10():
+def update_db_unversion_to_1_0():
     update_version = "1.0"
 
     # Connect to your SQLite database
@@ -148,8 +188,8 @@ def update_db_unversion_10():
     conn.commit()
     conn.close()
 
-# Update from unversion to 2.0
-def update_db_10_20():
+# Update from 1.0 to 2.0
+def update_db_1_0_to_2_0():
     update_version = "2.0"
 
     # Connect to your SQLite database
@@ -173,12 +213,31 @@ def update_db_10_20():
     conn.commit()
     conn.close()
 
+# Update from 2.0 to 2.1
+def update_db_2_0_to_2_1():
+    update_version = "2.1"
+
+    # Connect to your SQLite database
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+
+    # Insert or update the version information
+    cursor.execute('''
+    UPDATE version SET version_info = ?;
+    ''', (update_version,))
+
+    conn.commit()
+    conn.close()
+
+    init_tick_info()
+
 def backup_db(version):
     # Back up the database file
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
     # New file name with the timestamp
     backupfile = f"{DATABASE_FILE.split('.')[0]}_v{version}_bk_{timestamp}.db"
     # Copy the original file to the new file
+    logger.info(f"Backing up db file into {backupfile}")
     shutil.copyfile(DATABASE_FILE, backupfile)
 
 # Function that check if we need to convert the old version to new version of table
@@ -219,28 +278,36 @@ def update_db():
 
         # Update from unversion to 1.0
         if not field_exists:
-            logger.info(f"Updating from unversion db to 1.0 ...")
+            logger.info(f"Updating db from unversion to 1.0 ...")
 
             # Back up the database file
             backup_db("00")
 
             # Update the file
-            update_db_unversion_10()
+            update_db_unversion_to_1_0()
             version_info = "1.0"
 
             logger.info(f"Updated db version to %s", version_info)
 
         # Update from other version happend sequential here if neccessary
         if parse_version(version_info) < parse_version("2.0"):
-            logger.info(f"Updating from 1.0 db to 2.0 ...")
-
+            logger.info(f"Updating db from {version_info}  to 2.0 ...")
             # Back up the database file
             backup_db("10")
 
             # Update the file
-            update_db_10_20()
+            update_db_1_0_to_2_0()
             version_info = "2.0"
-            logger.info(f"Updated db version to %s", version_info)
+            logger.info(f"Finished update db version to %s", version_info)
+
+        if parse_version(version_info) < parse_version("2.1"):
+            logger.info(f"Updating db from {version_info} to 2.1 ...")
+
+            # Back up the database file
+            backup_db("20")
+            update_db_2_0_to_2_1()
+            version_info = "2.1"
+            logger.info(f"Finished update db version to %s", version_info)
 
         if parse_version(version_info) != parse_version(DB_VERSION):
             logger.error(f"Can not update from db from %s to %s", version_info, DB_VERSION)
@@ -271,11 +338,11 @@ def get_qtry_basic_info_from_node():
 def fetch_bets_from_node():
     # Connect to the node and get all bets
     try:
-        sts, active_bets = qt.get_all_bets()
-        return (sts, active_bets)
+        sts, all_bets, tick_number = qt.get_all_bets()
+        return (sts, all_bets, tick_number)
     except Exception as e:
-        logger.warning(f"Error fetching bets from node: {e}")
-        return (1, {})
+        logger.warning(f"Error fetching all bets from node: {e}")
+        return (1, {}, 0)
 
 def get_bet_info_from_node(betId):
     try:
@@ -356,10 +423,25 @@ def update_database_with_bets():
     while True:
         try:
             logger.info("Requesting data from node.")
-            sts, active_bets = fetch_bets_from_node()
+            sts, all_bets, tick_number = fetch_bets_from_node()
+
+            # Update the tick table
+            conn = sqlite3.connect(DATABASE_FILE)
+            cursor = conn.cursor()
+            # Fetch current tick in db
+            cursor.execute('''
+                SELECT tick_number
+                FROM tick_info
+            ''')
+            table_tick_number = cursor.fetchone()[0]
+            # Update tick number with the latest
+            tick_number = max(tick_number, table_tick_number)
+            cursor.execute(f'''UPDATE tick_info SET tick_number = {tick_number}''')
+            conn.commit()
+            conn.close()
 
             # Verify the bets
-            if not active_bets:
+            if not all_bets:
                 logger.warning('[WARNING] Bets from node is empty! Using the local database')
 
             sts, qt_basic_info = get_qtry_basic_info_from_node()
@@ -427,7 +509,7 @@ def update_database_with_bets():
             active_bet_ids = []
             conn = sqlite3.connect(DATABASE_FILE)
             cursor = conn.cursor()
-            for key, active_bet in active_bets.items():
+            for key, active_bet in all_bets.items():
                 active_bet_ids.append(key)
                 # Update the database if the bet info is valid
                 if active_bet:

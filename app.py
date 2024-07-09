@@ -148,6 +148,24 @@ def get_bets_base():
 
     return bets_list, node_info
 
+def fetch_tick_info():
+    if not os.path.isfile(DATABASE_FILE):
+        logger.warning(f"No database found at {DATABASE_FILE}. Please wait...")
+        return {}
+
+    conn = sqlite3.connect(DATABASE_FILE)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM tick_info')
+    row = cursor.fetchone()
+    conn.close()
+
+    if not row:
+        logger.warning(f"DB Tick info is empty. Please wait...")
+        return {}
+
+    # Convert rows to a list of dictionaries
+    return dict(row)
 
 def filter_active_bets(bets_list):
     # Active bet is the bet that doesn't have the result
@@ -311,6 +329,16 @@ def get_bet_options():
     ret = {
         'bet_options_detail': bet_options
     }
+
+    # Reply with json
+    return jsonify(ret)
+
+@app.route('/get_tick_info', methods=['GET'])
+def get_tick_info():
+    
+    tick_info = fetch_tick_info()
+    # Add the node info
+    ret = {'tick_info': tick_info}
 
     # Reply with json
     return jsonify(ret)
