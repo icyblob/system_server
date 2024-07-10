@@ -383,6 +383,8 @@ def check_primary_key_exists(cursor, table_name, primary_key_column, primary_key
 
 
 def update_current_total_qus(conn, bet_id):
+    """ Update total of qus betting into database """
+
     cursor = conn.cursor()
 
     # Fetch current_bet_state and amount_per_bet_slot
@@ -410,6 +412,7 @@ def update_current_total_qus(conn, bet_id):
 
 
 def update_betting_odds(conn, bet_id):
+    """ Update betting odds into database """
     # Retrieve current_bet_state for the given bet_id
     cur = conn.cursor()
     cur.execute("SELECT current_bet_state FROM quottery_info WHERE bet_id = ?", (bet_id,))
@@ -435,6 +438,7 @@ def update_betting_odds(conn, bet_id):
 
 
 def update_database_with_bets():
+    """ Fetch all bet data related from node and update the database """
     while True:
         try:
             logger.info("Requesting data from node.")
