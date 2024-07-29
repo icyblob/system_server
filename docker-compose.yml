@@ -3,7 +3,7 @@ x-common-env: &common-env DATABASE_PATH=/database
 services:
   db-updater:
     # Change the path to suitable Docker image
-    image: "ghcr.io/icyblob/flask-app:2.1"
+    image: "ghcr.io/icyblob/flask-app:2.2"
     volumes:
         # Mount the current folder as folder for saving database. Make sure you mount the same folder with flask-app
       - .:/database
@@ -19,7 +19,7 @@ services:
     depends_on:
       - db-updater
     # Change the path to suitable Docker image
-    image: "ghcr.io/icyblob/flask-app:2.1"
+    image: "ghcr.io/icyblob/flask-app:2.2"
     ports:
       - 5000:5000
     volumes:
