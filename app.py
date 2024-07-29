@@ -61,7 +61,7 @@ CONTAINING_FILTER = [
 
 
 def pagination_filter(bets_list):
-    
+
     filtered_bets = bets_list
     for pagin in PAGINATIONS_FILTER:
         pagin_filter = request.args.get(pagin)
@@ -75,7 +75,7 @@ def pagination_filter(bets_list):
     return filtered_bets
 
 def pagination_page(bets_list, page, page_size):
-    
+
     filtered_bets = bets_list
 
     # Pagination
@@ -87,7 +87,7 @@ def pagination_page(bets_list, page, page_size):
 
 # Get the data with pargination for the http request
 def apply_pagination(bets_list):
-   
+
     # Get pagination parameters
     page = int(request.args.get('page', 1))
     page_size = int(request.args.get('page_size', PAGINATION_THRESHOLD))
@@ -213,26 +213,27 @@ def filter_locked_bets(bets_list):
 
 
 def filter_inactive_bets(bets_list):
-    # Inactive bet is a bet that has result
-    inactive_bets_results = list(filter(lambda p: p['result'] >= 0, bets_list))
 
-    # Check the end date and close time
     current_utc_date = datetime.now(timezone.utc)
-    inactive_bets_datetime = []
+    inactive_bets = []
     for bet in bets_list:
         inactive_flag = False
-        end_datetime_str = bet['end_date'] + ' ' + bet['end_time']
 
-        try:
-            end_datetime = datetime.strptime(end_datetime_str, '%y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
-            inactive_flag = end_datetime <= current_utc_date
-        except Exception as e:
-            logger.warning(f"Date time format is not correct. Will not use for filtering active/inactive: {e}")
+        # Inactive bet is a bet that has result
+        if bet['result'] >= 0:
+            inactive_flag = True
+        else: # Check the end date and close time
+            end_datetime_str = bet['end_date'] + ' ' + bet['end_time']
+            try:
+                end_datetime = datetime.strptime(end_datetime_str, '%y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
+                inactive_flag = end_datetime <= current_utc_date
+            except Exception as e:
+                logger.warning(f"Date time format is not correct. Will not use for filtering active/inactive: {e}")
 
         if inactive_flag:
-            inactive_bets_datetime.append(bet)
+            inactive_bets.append(bet)
 
-    return inactive_bets_datetime + inactive_bets_results
+    return inactive_bets
 
 
 def get_bet_options_detail():
@@ -335,7 +336,7 @@ def get_bet_options():
 
 @app.route('/get_tick_info', methods=['GET'])
 def get_tick_info():
-    
+
     tick_info = fetch_tick_info()
     # Add the node info
     ret = {'tick_info': tick_info}
