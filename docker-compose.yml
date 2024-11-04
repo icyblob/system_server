@@ -25,6 +25,7 @@ services:
         # Mount the current folder as folder for saving database. Make sure you mount the same folder with db-updater
       - .:/database:ro
       - .:/cert:ro
+      - ./bet_external_asset:/bet_external_asset
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     environment:
