@@ -1,10 +1,11 @@
 import os
+import json
 import logging
 import sqlite3
 
 from flask_cors import CORS
 from datetime import datetime, timezone
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 
 log_format = '[%(name)s][%(asctime)s] %(message)s'
 # Configure the logging module to use the custom format
@@ -59,9 +60,20 @@ CONTAINING_FILTER = [
     "oracle_vote"
 ]
 
+BET_EXTERNAL_ASSET_DIR = "/bet_external_asset"
+ALLOWED_EXTENSIONS = {'txt', 'json'}
+app.config['BET_EXTERNAL_ASSET_DIR'] = BET_EXTERNAL_ASSET_DIR
+
+if not os.path.exists(BET_EXTERNAL_ASSET_DIR):
+    os.makedirs(BET_EXTERNAL_ASSET_DIR)
+
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 def pagination_filter(bets_list):
-
     filtered_bets = bets_list
     for pagin in PAGINATIONS_FILTER:
         pagin_filter = request.args.get(pagin)
@@ -74,8 +86,8 @@ def pagination_filter(bets_list):
 
     return filtered_bets
 
-def pagination_page(bets_list, page, page_size):
 
+def pagination_page(bets_list, page, page_size):
     filtered_bets = bets_list
 
     # Pagination
@@ -85,9 +97,9 @@ def pagination_page(bets_list, page, page_size):
 
     return paginated_bets
 
+
 # Get the data with pargination for the http request
 def apply_pagination(bets_list):
-
     # Get pagination parameters
     page = int(request.args.get('page', 1))
     page_size = int(request.args.get('page_size', PAGINATION_THRESHOLD))
@@ -102,7 +114,7 @@ def apply_pagination(bets_list):
         ret = {
             'bet_list': paginated_bets,
             'page': {
-                "current_records" : len(paginated_bets),
+                "current_records": len(paginated_bets),
                 "total_records": total_records,
                 "current_page": page,
                 "page_size": page_size,
@@ -113,7 +125,7 @@ def apply_pagination(bets_list):
         ret = {
             'bet_list': filtered_bets,
             'page': {
-                "current_records" : len(filtered_bets),
+                "current_records": len(filtered_bets),
                 "total_records": len(filtered_bets),
                 "current_page": 1,
                 "page_size": len(filtered_bets),
@@ -121,6 +133,7 @@ def apply_pagination(bets_list):
             }
         }
     return ret
+
 
 def get_bets_base():
     if not os.path.isfile(DATABASE_FILE):
@@ -148,6 +161,7 @@ def get_bets_base():
 
     return bets_list, node_info
 
+
 def fetch_tick_info():
     if not os.path.isfile(DATABASE_FILE):
         logger.warning(f"No database found at {DATABASE_FILE}. Please wait...")
@@ -166,6 +180,7 @@ def fetch_tick_info():
 
     # Convert rows to a list of dictionaries
     return dict(row)
+
 
 def filter_active_bets(bets_list):
     # Active bet is the bet that doesn't have the result
@@ -213,7 +228,6 @@ def filter_locked_bets(bets_list):
 
 
 def filter_inactive_bets(bets_list):
-
     current_utc_date = datetime.now(timezone.utc)
     inactive_bets = []
     for bet in bets_list:
@@ -222,7 +236,7 @@ def filter_inactive_bets(bets_list):
         # Inactive bet is a bet that has result
         if bet['result'] >= 0:
             inactive_flag = True
-        else: # Check the end date and close time
+        else:  # Check the end date and close time
             end_datetime_str = bet['end_date'] + ' ' + bet['end_time']
             try:
                 end_datetime = datetime.strptime(end_datetime_str, '%y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
@@ -252,6 +266,7 @@ def get_bet_options_detail():
     bet_options_details_list = [dict(row) for row in rows]
 
     return bet_options_details_list
+
 
 @app.route('/get_all_bets', methods=['GET'])
 def get_all_bets():
@@ -314,13 +329,14 @@ def get_inactive_bets():
     # Reply with json
     return jsonify(ret)
 
+
 @app.route('/get_available_filters', methods=['GET'])
 def get_filter():
-
     # Add the node info
     ret = {'available_filters': PAGINATIONS_FILTER}
     # Reply with json
     return jsonify(ret)
+
 
 @app.route('/get_bet_options_detail', methods=['GET'])
 def get_bet_options():
@@ -334,15 +350,52 @@ def get_bet_options():
     # Reply with json
     return jsonify(ret)
 
+
 @app.route('/get_tick_info', methods=['GET'])
 def get_tick_info():
-
     tick_info = fetch_tick_info()
     # Add the node info
     ret = {'tick_info': tick_info}
 
     # Reply with json
     return jsonify(ret)
+
+
+@app.route("/upload", methods=["POST"])
+def upload_asset():
+    data = request.get_json()
+    hash_value = data.get("hash")
+    description = data.get("description")
+
+    if not hash_value or not description:
+        return jsonify({"error": "Both hash and description are required."}), 400
+
+    filename = f"{hash_value}.json"
+    file_path = os.path.join(app.config['BET_EXTERNAL_ASSET_DIR'], filename)
+
+    if os.path.exists(file_path):
+        return jsonify({"error": "File already exists."}), 409
+    try:
+        with open(file_path, "w") as f:
+            json.dump({"description": description}, f)
+
+        return jsonify({"success": True}), 201
+    except Exception as e:
+        logger.error(f"Error saving description: {e}")
+        return jsonify({"error": "Internal server error."}), 500
+
+
+@app.route("/bet_external_asset/<hash_value>", methods=["GET"])
+def get_asset(hash_value):
+    filename = f"{hash_value}.json"
+    directory = app.config['BET_EXTERNAL_ASSET_DIR']
+    file_path = os.path.join(directory, filename)
+
+    if os.path.exists(file_path):
+        return send_from_directory(directory, filename)
+    else:
+        return jsonify({"error": "File not found."}), 404
+
 
 if __name__ == '__main__':
     # Init parameters with environment variables
