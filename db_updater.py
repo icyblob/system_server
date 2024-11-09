@@ -2,7 +2,7 @@ import os
 import sys
 import sqlite3
 import json
-import quottery_cpp_wrapper
+import quottery_rpc_wrapper
 from threading import Thread
 import time
 from datetime import datetime, timezone
@@ -21,8 +21,12 @@ logger = logging.getLogger('DB_UPDATER')
 # Init default parameters
 # DB version
 DB_VERSION = "2.1"
-NODE_IP = None
-NODE_PORT = None
+# Mainnet
+# HTTP_ENPOINT = 'https://rpc.qubic.org'
+# Testnet
+# HTTP_ENPOINT = 'https://91.210.226.146'
+NODE_IP = 'https://rpc.qubic.org'
+NODE_PORT = 21841
 DATABASE_PATH = "."
 
 QUOTTERY_LIBS = 'libs/quottery_cpp/lib/libquottery_cpp.so'
@@ -45,8 +49,8 @@ def init_tick_info():
             number_of_aligned_votes INTEGER,
             number_of_misaligned_votes INTEGER,
             initial_tick INTEGER,
-            PRIMARY KEY (tick_number, epoch)   
-            )  
+            PRIMARY KEY (tick_number, epoch)
+            )
             ''')
     # Check if the row exists
     cursor.execute("SELECT COUNT(*) FROM tick_info")
@@ -54,9 +58,9 @@ def init_tick_info():
 
     if row_count == 0:
         cursor.execute(
-            f'''INSERT INTO tick_info 
-            (tick_number, epoch, tick_duration, number_of_aligned_votes, number_of_misaligned_votes, initial_tick) 
-            VALUES  
+            f'''INSERT INTO tick_info
+            (tick_number, epoch, tick_duration, number_of_aligned_votes, number_of_misaligned_votes, initial_tick)
+            VALUES
             (0, 0, 0, 0, 0, 0)''')
     else:
         cursor.execute(f'''UPDATE tick_info SET tick_number = 0''')
@@ -100,7 +104,7 @@ def init_node_basic_info():
 
     # There is an existed node ip. Remove it to make sure doesn't conflict with current node ip and port
     cursor.execute(f'''DELETE FROM node_basic_info''')
-        
+
     conn.commit()
     conn.close()
 
@@ -631,9 +635,6 @@ if __name__ == '__main__':
     if os.getenv('NODE_IP'):
         NODE_IP = os.getenv('NODE_IP')
 
-    if os.getenv('NODE_PORT'):
-        NODE_PORT = int(os.getenv('NODE_PORT'))
-
     if os.getenv('DATABASE_PATH'):
         DATABASE_PATH = os.getenv('DATABASE_PATH')
 
@@ -642,8 +643,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Database update for qtry.')
 
     # Arguments
-    parser.add_argument('-nodeip', type=str, help='Node IP address')
-    parser.add_argument('-nodeport', type=int, help='Node port number')
+    parser.add_argument('-nodeip', type=str, help='Address of http endpoint')
     parser.add_argument('-dbpath', type=str, help='Directory contain the database file')
 
     # Execute the parse_args() method
@@ -652,15 +652,13 @@ if __name__ == '__main__':
     # Access the arguments and overwrite them
     if args.nodeip:
         NODE_IP = args.nodeip
-    if args.nodeport:
-        NODE_PORT = args.nodeport
     if args.dbpath:
         DATABASE_PATH = args.dbpath
     DATABASE_FILE = os.path.join(DATABASE_PATH, DATABASE_FILE)
 
     # Print the configuration to verify
     logger.info("Launch the database update with configurations")
-    logger.info(f"- Node address: {NODE_IP}:{NODE_PORT}")
+    logger.info(f"- Address: {NODE_IP}")
     logger.info(f"- Database file: {DATABASE_FILE}")
     logger.info(f"- Qtry path: {QUOTTERY_LIBS}")
 
@@ -668,7 +666,7 @@ if __name__ == '__main__':
     if not os.path.isfile(QUOTTERY_LIBS):
         logger.info(f"quottery_cpp_wrapper path NOT FOUND: {QUOTTERY_LIBS}. Exiting.")
         sys.exit(1)
-    qt = quottery_cpp_wrapper.QuotteryCppWrapper(QUOTTERY_LIBS, NODE_IP, NODE_PORT, 'DB_UPDATER')
+    qt = quottery_rpc_wrapper.QuotteryRpcWrapper(NODE_IP, QUOTTERY_LIBS, 'DB_UPDATER')
 
     init_db()
     update_database_with_bets()
