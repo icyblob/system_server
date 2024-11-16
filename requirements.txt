@@ -10,3 +10,4 @@ MarkupSafe==2.1.5
 packaging==24.1
 pycparser==2.22
 Werkzeug==3.0.3
+requests==2.25.1

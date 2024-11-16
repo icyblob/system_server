@@ -3,15 +3,14 @@ x-common-env: &common-env DATABASE_PATH=/database
 services:
   db-updater:
     # Change the path to suitable Docker image
-    image: "ghcr.io/icyblob/flask-app:2.2"
+    image: "ghcr.io/icyblob/flask-app:latest"
     volumes:
         # Mount the current folder as folder for saving database. Make sure you mount the same folder with flask-app
       - .:/database
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     environment:
-      - NODE_IP=5.199.134.150         # example node IP. Replace with the real IP
-      - NODE_PORT=31844               # example node port. Replace with the real port
+      - NODE_IP=https://rpc.qubic.org        # example endpoint. Replace with the real endpoint
       - *common-env
     command: ["python3", "db_updater.py"]
     restart: always
@@ -19,7 +18,7 @@ services:
     depends_on:
       - db-updater
     # Change the path to suitable Docker image
-    image: "ghcr.io/icyblob/flask-app:2.2"
+    image: "ghcr.io/icyblob/flask-app:latest"
     ports:
       - 5000:5000
     volumes:

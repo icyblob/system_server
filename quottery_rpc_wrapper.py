@@ -1,109 +1,61 @@
-import ctypes
 from collections import defaultdict
 import logging
+import requests
 import time
-# Define the C++ Quottery struct wrapper
+import ctypes
+import base64
+import qtry_utils
 
+# Define the rpc Quottery struct wrapper
+MESSAGE_HEADERS = {
+  'Accept': 'application/json',
+  'Content-Type': 'application/json',
+}
 
-class QuotteryFeesOutput(ctypes.Structure):
-    """Wrapper struct for accessing QuotteryFeesOutput in quottery_cpp library"""
-    _fields_ = [
-        ('feePerSlotPerDay', ctypes.c_uint64),  # Amount of qus
-        ('gameOperatorFee', ctypes.c_uint64),  # Amount of qus
-        # 4 digit number ABCD means AB.CD% | 1234 is 12.34%
-        ('shareholderFee', ctypes.c_uint64),
-        # 4 digit number ABCD means AB.CD% | 1234 is 12.34%
-        ('minBetSlotAmount', ctypes.c_uint64),
-        ('gameOperatorPubkey', ctypes.c_uint8 * 32)
-    ]
+API_PATH = '/v1/querySmartContract'
+TICK_INFO_PATH = '/v1/tick-info'
 
-class BetInfoOutput(ctypes.Structure):
-    """Wrapper struct for accessing BetInfoOutput in quottery_cpp library"""
-    _fields_ = [
-        ('betId', ctypes.c_uint32),
-        ('nOption', ctypes.c_uint32),  # options number
-        ('creator', ctypes.c_uint8 * 32),
-        ('betDesc', ctypes.c_uint8 * 32),
-        ('optionDesc', ctypes.c_uint8 * 256),  # 8x(32)=256bytes
-        ('oracleProviderId', ctypes.c_uint8 * 256),  # 256x8=2048bytes ???
-        ('oracleFees', ctypes.c_uint32 * 8),   # 4x8 = 32 bytes
+QTRY_CONTRACT_INDEX = 2
+QTRY_GET_BASIC_INFO = 1
+QTRY_GET_BET_INFO = 2
+QTRY_GET_BET_OPTION_DETAIL = 3
+QTRY_GET_ACTIVE_BET = 4
+QTRY_GET_BET_BY_CREATOR = 5
 
-        # Time relate to the bet. The format is [YY, MM, DD, HH, MM, SS]
-        ('openDateTime', ctypes.c_uint8 * 6),
-        ('closeDateTime', ctypes.c_uint8 * 6),   # stop receiving bet date
-        ('endDateTime', ctypes.c_uint8 * 6),       # result date
+QTRY_GET_STRING = {
+    QTRY_GET_BASIC_INFO : "GetBasicInfo",
+    QTRY_GET_BET_INFO : "GetBetInfo",
+    QTRY_GET_BET_OPTION_DETAIL : "GetBetOptionDetail",
+    QTRY_GET_ACTIVE_BET : "GetActiveBet",
+    QTRY_GET_BET_BY_CREATOR : "GetBetByCreator"
+}
 
-        #     // Amounts and numbers
-        ('minBetAmount', ctypes.c_uint64),
-        ('maxBetSlotPerOption', ctypes.c_uint32),
-        # how many bet slots have been filled on each option
-        ('currentBetState', ctypes.c_uint32 * 8),
+def makeJsonData(contractIndex, inputType, inputSize, requestData):
+    return {
+        'contractIndex': contractIndex,
+        'inputType': inputType,
+        'inputSize': inputSize,
+        'requestData': requestData
+    }
 
-        # Voting result
-        ## Vote of each oracle provider chose
-        ## -1 mean invalid
-        ('betResultWonOption', ctypes.c_int8 * 8),
-        ## List of oracle providers that attend to the voting
-        ## -1 mean in valid
-        ('betResultOPId', ctypes.c_int8 * 8)
-
-    ]
-
-class QtryBasicInfoOutput(ctypes.Structure):
-    """Wrapper struct for accessing QtryBasicInfoOutput in quottery_cpp library"""
-    _fields_ = [
-    ('feePerSlotPerHour', ctypes.c_uint64),  # Amount of qus
-    ('gameOperatorFee', ctypes.c_uint64),  # 4 digit number ABCD means AB.CD% | 1234 is 12.34%
-    ('shareholderFee', ctypes.c_uint64),   # 4 digit number ABCD means AB.CD% | 1234 is 12.34%
-    ('minBetSlotAmount', ctypes.c_uint64), # amount of qus
-    ('burnFee', ctypes.c_uint64),          # percentage
-    ('nIssuedBet', ctypes.c_uint64),       # number of issued bet
-    ('moneyFlow', ctypes.c_uint64),
-    ('moneyFlowThroughIssueBet', ctypes.c_uint64),
-    ('moneyFlowThroughJoinBet', ctypes.c_uint64),
-    ('moneyFlowThroughFinalizeBet', ctypes.c_uint64),
-    ('earnedAmountForShareHolder', ctypes.c_uint64),
-    ('paidAmountForShareHolder', ctypes.c_uint64),
-    ('earnedAmountForBetWinner', ctypes.c_uint64),
-    ('distributedAmount', ctypes.c_uint64),
-    ('burnedAmount', ctypes.c_uint64),
-    ('gameOperator', ctypes.c_uint8 * 32)
-    ]
-
-class QtryBetOptionDetail(ctypes.Structure):
-    """Wrapper struct for accessing QtryBetOptionDetail in quottery_cpp library"""
-    _fields_ = [
-        ('bettor', ctypes.c_uint8 * 32768), # 32 * 1024
-        ('amountOfSlots', ctypes.c_uint * 1024)
-    ]
-
-class QuotteryCppWrapper:
-    """Class allow requesting data from node by calling C++ function in quottery_cpp library """
-    def __init__(self, libs, nodeIP, port, logName=''):
+class QuotteryRpcWrapper:
+    """Class allow requesting data from http endpoint"""
+    def __init__(self, address, libFile, logName=''):
         """
         Args:
-            libs (str): The full path to quottery_cpp library 
-            nodeIP (str): The IP of the node
-            port (int): The port of the node
+            apiUri (str): The full path to quottery http endpoint
             logName (str, optional): The name of the logging, default is empty
         """
-
-        self.nodeIP = nodeIP
-        self.port = port
 
         log_format = '[%(name)s][%(asctime)s] %(message)s'
         # Configure the logging module to use the custom format
         logging.basicConfig(level=logging.INFO, format=log_format)
-        self.logger = logging.getLogger('QTRY_CPP_WRAPPER')
+        self.logger = logging.getLogger('QTRY_HTTP_WRAPPER')
         if logName:
             self.logger = logging.getLogger(logName)
 
-        # Constant parameters
-        self.scheduleTickOffset = 5
-        self.maxNumberOfOracleProvides = 8
-
-        # Quottery related
-        self.quottery_cpp_func = ctypes.CDLL(libs)
+        # Quottery lib related function. Need to call K12 function
+        self.quottery_cpp_func = ctypes.CDLL(libFile)
 
         # Key utils functions: PubKey from Indentity
         self.quottery_cpp_func.getPublicKeyFromIdentityWrapper.argtypes = [
@@ -115,46 +67,28 @@ class QuotteryCppWrapper:
             ctypes.POINTER(ctypes.c_uint8), ctypes.c_char_p]
         self.quottery_cpp_func.getIdentityFromPublicKeyWrapper.restype = ctypes.c_int
 
-        # Node utils functions: Get current tick number from node
-        self.quottery_cpp_func.getTickNumberFromNode.argtypes = [
-            ctypes.c_char_p, ctypes.c_int, ctypes.POINTER(ctypes.c_uint32)]
-        self.quottery_cpp_func.getTickNumberFromNode.restype = ctypes.c_int
+        # Constant parameters
+        self.httpEndPoint = address
+        self.apiUri = self.httpEndPoint + API_PATH
+        self.tickInfoUri = self.httpEndPoint + TICK_INFO_PATH
+        self.scheduleTickOffset = 5
+        self.maxNumberOfOracleProvides = 8
+        self.maxIdsPerOption = 1024
 
-        # Quottery basic information
-        self.quottery_cpp_func.quotteryWrapperGetBasicInfo.argtypes = [
-            ctypes.c_char_p, ctypes.c_int, ctypes.POINTER(QtryBasicInfoOutput)]
-        self.quottery_cpp_func.quotteryWrapperGetBasicInfo.restype = ctypes.c_int
-
-        # Print the bet infomation
-        self.quottery_cpp_func.quotteryWrapperPrintBetInfo.argtypes = [
-            ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
-        self.quottery_cpp_func.quotteryWrapperPrintBetInfo.restype = ctypes.c_int
-
-        # Get a list of active bets ID
-        self.quottery_cpp_func.quotteryWrapperGetActiveBet.argtypes = [
-            ctypes.c_char_p,
-            ctypes.c_int,
-            ctypes.POINTER(ctypes.c_uint32),
-            ctypes.POINTER(ctypes.c_uint32)]
-        self.quottery_cpp_func.quotteryWrapperGetActiveBet.restype = ctypes.c_int
-
-        # Get information from a bet ID
-        self.quottery_cpp_func.quotteryWrapperGetBetInfo.argtypes = [
-            ctypes.c_char_p,
-            ctypes.c_int,
-            ctypes.c_int,
-            ctypes.POINTER(BetInfoOutput)]
-        self.quottery_cpp_func.quotteryWrapperGetBetInfo.restype = ctypes.c_int
-
-        # Get BetOptionDetail
-        self.quottery_cpp_func.quotteryWrapperBetOptionDetail.argtypes = [
-            ctypes.c_char_p,
-            ctypes.c_int,
-            ctypes.c_uint32,
-            ctypes.c_uint32,
-            ctypes.POINTER(ctypes.c_uint32),
-            ctypes.POINTER(QtryBetOptionDetail)]
-        self.quottery_cpp_func.quotteryWrapperBetOptionDetail.restype = ctypes.c_int
+    def get_qtry_response(self, json_data):
+        try:
+            response = requests.post(
+                self.apiUri, headers = MESSAGE_HEADERS, json = json_data)
+            response.raise_for_status()  # Raise an error for bad status codes
+            result = response.json()  # Parse the JSON response
+            return result
+        except requests.exceptions.RequestException as e:
+            print("An error occurred:", e)
+            debug_request = 'Unknown'
+            if json_data['inputType'] in QTRY_GET_STRING:
+                debug_request =  QTRY_GET_STRING[json_data['inputType']]
+            self.logger.warning('[WARNING] Failed to get qtry respond for %s. Retry later.', debug_request)
+            return None
 
     def get_qtry_basic_info(self):
         """Gets the quottery basic information
@@ -163,15 +97,18 @@ class QuotteryCppWrapper:
             sts (int): status of request. 0 is success, otherwise is failure
             dict: a dictionary that contain information about quottery basic information. If failure, it is empty
         """
-        
-        basic_info = {}
-        qt_basic_info = QtryBasicInfoOutput()
-        sts = self.quottery_cpp_func.quotteryWrapperGetBasicInfo(self.nodeIP.encode(
-            'utf-8'), self.port, ctypes.byref(qt_basic_info))
+        json_data = makeJsonData(QTRY_CONTRACT_INDEX, QTRY_GET_BASIC_INFO, 0, "")
+        response_data = self.get_qtry_response(json_data)
 
-        if sts :
+        basic_info = {}
+        sts = 0
+        if response_data == None :
+            sts = 1
             self.logger.warning('[WARNING] Failed to get qtry basic info')
             return (sts, basic_info)
+
+        data =  base64.b64decode(response_data['responseData'])
+        qt_basic_info = qtry_utils.QtryBasicInfoOutput.from_buffer_copy(data)
 
         # Fill the data in dictionary
         basic_info['fee_per_slot_per_hour'] = qt_basic_info.feePerSlotPerHour
@@ -192,14 +129,46 @@ class QuotteryCppWrapper:
 
         identity_buffer = ctypes.create_string_buffer(60)
         self.quottery_cpp_func.getIdentityFromPublicKeyWrapper(
-            qt_basic_info.gameOperator, identity_buffer)
-        basic_info['game_operator']= identity_buffer.value.decode('utf-8')
+             qt_basic_info.gameOperator, identity_buffer)
+        basic_info['game_operator'] = identity_buffer.value.decode('utf-8')
 
         return sts, basic_info
 
+    def get_active_bets(self):
+        """Gets the number of active bet
+
+        Args:
+            None
+
+        Returns:
+            sts (int): status of request. 0 is success, otherwise is failure
+            number (int): number of active bet
+        """
+        active_bets = []
+        number_of_active_bets = 0
+        json_data = makeJsonData(QTRY_CONTRACT_INDEX, QTRY_GET_ACTIVE_BET, 0, "")
+        response_data = self.get_qtry_response(json_data)
+        sts = 0
+        if response_data == None :
+            sts = 1
+            self.logger.warning('[WARNING] Failed to get active bet')
+            return (sts, active_bets)
+
+        data =  base64.b64decode(response_data['responseData'])
+        # Extract the first 4 bytes as number of active bets
+        number_of_active_bets = int.from_bytes(data[:4], byteorder='little')
+
+        # Extract active bets
+        for i in range(1, number_of_active_bets + 1):
+            next_4_bytes = data[4 * i : 4 * i + 4]
+            next_integer = int.from_bytes(next_4_bytes, byteorder='little')
+            active_bets.append(next_integer)
+
+        return sts, active_bets
+
     def get_bet_info(self, betId):
         """Gets the information of a specific bet
-        
+
         Args:
             betId (int): The ID of the bet
 
@@ -209,14 +178,17 @@ class QuotteryCppWrapper:
         """
         bet_info = {}
 
-         # Access the fields of the struct
-        qt_output_result = BetInfoOutput()
-        sts = self.quottery_cpp_func.quotteryWrapperGetBetInfo(self.nodeIP.encode(
-            'utf-8'), self.port, betId, ctypes.byref(qt_output_result))
-
-        if sts:
-            self.logger.warning('[WARNING] Failed to get info of bet ID %d', betId)
+        input_base64 = base64.b64encode(betId.to_bytes(4, byteorder='little', signed=False)).decode('ascii')
+        json_data = makeJsonData(QTRY_CONTRACT_INDEX, QTRY_GET_BET_INFO, 4, input_base64)
+        response_data = self.get_qtry_response(json_data)
+        sts = 0
+        if response_data == None :
+            sts = 1
+            self.logger.warning('WARNING] Failed to get info of bet ID %d', betId)
             return (sts, bet_info)
+
+        data =  base64.b64decode(response_data['responseData'])
+        qt_output_result = qtry_utils.BetInfoOutput.from_buffer_copy(data)
 
         bet_info['bet_id'] = betId
         # Strip the string terminator
@@ -245,26 +217,29 @@ class QuotteryCppWrapper:
 
         bet_info['max_slot_per_option'] = qt_output_result.maxBetSlotPerOption
 
-        bet_info['open_date'] = f"{qt_output_result.openDateTime[0]:02}" + '-' + \
-            f"{qt_output_result.openDateTime[1]:02}" + \
-            '-' + f"{qt_output_result.openDateTime[2]:02}"
-        bet_info['open_time'] = f"{qt_output_result.openDateTime[3]:02}" + ':' + \
-            f"{qt_output_result.openDateTime[4]:02}" + \
-            ':' + f"{qt_output_result.openDateTime[5]:02}"
+        openDateTime = qtry_utils.unpack_date(qt_output_result.openDateTime)
+        bet_info['open_date'] = f"{openDateTime[0]:02}" + '-' + \
+            f"{openDateTime[1]:02}" + \
+            '-' + f"{openDateTime[2]:02}"
+        bet_info['open_time'] = f"{openDateTime[3]:02}" + ':' + \
+            f"{openDateTime[4]:02}" + \
+            ':' + f"{openDateTime[5]:02}"
 
-        bet_info['close_date'] = f"{qt_output_result.closeDateTime[0]:02}" + '-' + \
-            f"{qt_output_result.closeDateTime[1]:02}" + \
-            '-' + f"{qt_output_result.closeDateTime[2]:02}"
-        bet_info['close_time'] = f"{qt_output_result.closeDateTime[3]:02}" + ':' + \
-            f"{qt_output_result.closeDateTime[4]:02}" + \
-            ':' + f"{qt_output_result.closeDateTime[5]:02}"
+        closeDateTime = qtry_utils.unpack_date(qt_output_result.closeDateTime)
+        bet_info['close_date'] = f"{closeDateTime[0]:02}" + '-' + \
+            f"{closeDateTime[1]:02}" + \
+            '-' + f"{closeDateTime[2]:02}"
+        bet_info['close_time'] = f"{closeDateTime[3]:02}" + ':' + \
+            f"{closeDateTime[4]:02}" + \
+            ':' + f"{closeDateTime[5]:02}"
 
-        bet_info['end_date'] = f"{qt_output_result.endDateTime[0]:02}" + '-' + \
-            f"{qt_output_result.endDateTime[1]:02}" + \
-            '-' + f"{qt_output_result.endDateTime[2]:02}"
-        bet_info['end_time'] = f"{qt_output_result.endDateTime[3]:02}" + ':' + \
-            f"{qt_output_result.endDateTime[4]:02}" + \
-            ':' + f"{qt_output_result.endDateTime[5]:02}"
+        endDateTime = qtry_utils.unpack_date(qt_output_result.endDateTime)
+        bet_info['end_date'] = f"{endDateTime[0]:02}" + '-' + \
+            f"{endDateTime[1]:02}" + \
+            '-' + f"{endDateTime[2]:02}"
+        bet_info['end_time'] = f"{endDateTime[3]:02}" + ':' + \
+            f"{endDateTime[4]:02}" + \
+            ':' + f"{endDateTime[5]:02}"
 
 
         # Oracle id and fee. Assume they are follow extract order
@@ -315,22 +290,19 @@ class QuotteryCppWrapper:
         activeBets ={}
 
         # Get the active bets id
-        arrayPointer = (ctypes.c_uint32 * 1024)()
-        numberOfActiveBets = ctypes.c_uint32(0)
-        sts = self.quottery_cpp_func.quotteryWrapperGetActiveBet(self.nodeIP.encode(
-            'utf-8'), self.port, ctypes.pointer(numberOfActiveBets), arrayPointer)
+        sts, active_bets_list = self.get_active_bets()
         if sts:
             self.logger.warning('Get bets from node failed!')
             return (sts, activeBets, 0)
 
-        bets_count = numberOfActiveBets.value
-        self.logger.info("Node responds %d bets", bets_count)
+        bets_count = len(active_bets_list)
+        self.logger.info("Server responds %d bets", bets_count)
 
         # The number of bet that can get information from node
         bet_info_count = 0
         # Process each active bet and recording it
         for i in range(0, bets_count):
-            bet_id = arrayPointer[i]
+            bet_id = active_bets_list[i]
 
             # The bet is inactive. Init it with an empty bet info
             activeBets[bet_id] = {}
@@ -377,26 +349,26 @@ class QuotteryCppWrapper:
             activeBets[bet_info['bet_id']] = bet_info
 
             bet_info_count = bet_info_count + 1
-        
+
         # Only report the tick number if all bets has been respond from node
         tick_number = 0
         if bet_info_count == bets_count:
             # Get current tick number
-            current_tick_number = ctypes.c_uint32(0)
-            sts = self.quottery_cpp_func.getTickNumberFromNode(self.nodeIP.encode(
-                'utf-8'), self.port, ctypes.pointer(current_tick_number))
-            if sts:
+            try:
+                response = requests.get(self.tickInfoUri)
+                response.raise_for_status()  # Raise an error for bad status codes
+                result = response.json()  # Parse the JSON response
+                tick_number = result['tickInfo']['tick']
+            except requests.exceptions.RequestException as e:
                 self.logger.warning('Get current tick number failed!')
-            else:
-                tick_number = current_tick_number.value
-                
+
         return (sts, activeBets, tick_number)
 
     def get_bet_option_detail(self, betID, betOption):
         """Gets the detail of a specific bet and bet option
-        
+
         Args:
-            betId (int): The ID of the bet
+            betID (int): The ID of the bet
             betOption (int): The option ID of this bet
 
         Returns:
@@ -407,26 +379,39 @@ class QuotteryCppWrapper:
         # Return users detail dictionary
         bet_option_detail = {}
 
-        qt_bet_option_detail = QtryBetOptionDetail()
-        number_of_usrs = ctypes.c_uint32(0)
-        sts = self.quottery_cpp_func.quotteryWrapperBetOptionDetail(self.nodeIP.encode(
-            'utf-8'), self.port, betID, betOption, ctypes.pointer(number_of_usrs), ctypes.pointer(qt_bet_option_detail))
-
-        # No information or bad connection. Just return empty
-        if sts == 2 or sts == 1:
+        request_data = [betID, betOption]
+        bytes_data = b''.join(value.to_bytes(4, byteorder='little', signed=False) for value in request_data)
+        input_base64 = base64.b64encode(bytes_data).decode('ascii')
+        json_data = makeJsonData(QTRY_CONTRACT_INDEX, QTRY_GET_BET_OPTION_DETAIL, 8, input_base64)
+        response_data = self.get_qtry_response(json_data)
+        sts = 0
+        if response_data == None :
+            sts = 1
             return (sts, bet_option_detail)
 
-        # Process each active bet and recording it
-        usr_count = number_of_usrs.value
-        for i in range(0, usr_count):
-            # Pack the oracle ID
-            offset = 32 * i
-            user_public_key = ctypes.cast(ctypes.addressof(
-                qt_bet_option_detail.bettor) + offset, ctypes.POINTER(ctypes.c_uint8))
+        data =  base64.b64decode(response_data['responseData'])
+        all_zeros = all(value == 0 for value in data)
+        # The bet does not have any infomation yet
+        if all_zeros:
+            sts = 1
+            return (sts, bet_option_detail)
+
+        for i in range(0, len(data), 32):
+            pubkey = data[i:i + 32]
+            all_zeros = all(value == 0 for value in pubkey)
+            # Only compute id if public key is not fully zeros
+            if all_zeros:
+                continue
+
             # Append the oracle ID
+            oracle_id_public_key = ctypes.cast(pubkey, ctypes.POINTER(ctypes.c_uint8))
             identity_buffer = ctypes.create_string_buffer(60)
             self.quottery_cpp_func.getIdentityFromPublicKeyWrapper(
-                user_public_key, identity_buffer)
+                oracle_id_public_key, identity_buffer)
             user_id = identity_buffer.value.decode('utf-8')
-            bet_option_detail[user_id] = qt_bet_option_detail.amountOfSlots[i]
-        return sts, bet_option_detail
+            if user_id in bet_option_detail:
+                bet_option_detail[user_id] += 1
+            else:
+                bet_option_detail[user_id] = 1
+
+        return (sts, bet_option_detail)
