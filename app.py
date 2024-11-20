@@ -420,9 +420,15 @@ if __name__ == '__main__':
     logger.info(f"- Debug mode: {DEBUG_MODE}")
     logger.info(f"- Pagination threshold: {PAGINATION_THRESHOLD}")
 
-    # Insert the ssl crt and key here
-    ssl_context = (os.getenv('CERT_PATH'), os.getenv('CERT_KEY_PATH'))
-    if DEBUG_MODE:
-        ssl_context = 'adhoc'
+cert_path = os.getenv('CERT_PATH')
+    key_path = os.getenv('CERT_KEY_PATH')
 
-    app.run(host='0.0.0.0', threaded=True, port=APP_PORT, debug=DEBUG_MODE, ssl_context=ssl_context)
+    if cert_path and key_path and os.path.exists(cert_path) and os.path.exists(key_path):
+        ssl_context = (cert_path, key_path)
+        logger.info(f"Running with SSL context: {ssl_context}")
+    else:
+        ssl_context = None
+        logger.info("Running without SSL context")
+
+    app.run(host='0.0.0.0', threaded=True, port=APP_PORT, debug=DEBUG_MODE, ssl_context=ssl_context) 
+

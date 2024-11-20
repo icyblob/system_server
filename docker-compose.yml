@@ -1,38 +1,30 @@
 x-common-env: &common-env DATABASE_PATH=/database
 
 services:
-  db-updater:
-    # Change the path to suitable Docker image
-    image: "ghcr.io/icyblob/flask-app:2.2"
-    volumes:
-        # Mount the current folder as folder for saving database. Make sure you mount the same folder with flask-app
-      - .:/database
-      - /etc/localtime:/etc/localtime:ro
-      - /etc/timezone:/etc/timezone:ro
-    environment:
-      - NODE_IP=5.199.134.150         # example node IP. Replace with the real IP
-      - NODE_PORT=31844               # example node port. Replace with the real port
-      - *common-env
-    command: ["python3", "db_updater.py"]
-    restart: always
-  flask-app:
-    depends_on:
-      - db-updater
-    # Change the path to suitable Docker image
-    image: "ghcr.io/icyblob/flask-app:2.2"
+  server_backup:
+    image: "flask-app"
     ports:
-      - 5000:5000
+      - "8080:80"
+    volumes:
+      - ./bet_external_asset:/app/bet_external_asset
+    command: ["python", "backup_server.py"]
+  flask-app:
+    # Change the path to suitable Docker image
+    image: "flask-app"
+    ports:
+      - 80:5000
     volumes:
         # Mount the current folder as folder for saving database. Make sure you mount the same folder with db-updater
       - .:/database:ro
       - .:/cert:ro
-      - ./bet_external_asset:/bet_external_asset
+      - /home/user/icyblob/workspace/bet_sync/bet_external_asset:/bet_external_asset:ro
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     environment:
       - FLASK_ENV=production
-      - CERT_PATH=/cert/qtry.crt      # replace your crt here
-      - CERT_KEY_PATH=/cert/qtry.key  # replace your key here
+        #- CERT_PATH=/cert/cert.pem      # replace your crt here
+        #- CERT_KEY_PATH=/cert/key.pem  # replace your key here
       - *common-env
-    command: ["python3", "app.py"]
+    command: ["python", "app.py"]
     restart: always
+

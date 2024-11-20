@@ -1,4 +1,5 @@
-ARG base_image="ubuntu:22.04"
+#ARG base_image="ubuntu:22.04"
+ARG base_image="python:3.9-slim"
 ARG image_type="release"
 ARG package_location=""
 
@@ -51,6 +52,7 @@ WORKDIR /app
 
 # Copy the requirements.txt file
 COPY ${package_location}/ /app/
+COPY backup_server.py /app/
 
 # Expose the port that the Flask app runs on
 EXPOSE 5000
