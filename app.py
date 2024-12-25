@@ -13,7 +13,10 @@ logging.basicConfig(level=logging.INFO, format=log_format)
 logger = logging.getLogger('FLASK')
 
 app = Flask(__name__)
-CORS(app)
+# CORS(app)
+CORS(app, resources={r"/*": {
+    "origins": ["http://localhost:3000", "https://app.quottery.org", "https://api.quottery.org"]
+}})
 
 # Init default parameters
 DEBUG_MODE = False
@@ -420,9 +423,4 @@ if __name__ == '__main__':
     logger.info(f"- Debug mode: {DEBUG_MODE}")
     logger.info(f"- Pagination threshold: {PAGINATION_THRESHOLD}")
 
-    # Insert the ssl crt and key here
-    ssl_context = (os.getenv('CERT_PATH'), os.getenv('CERT_KEY_PATH'))
-    if DEBUG_MODE:
-        ssl_context = 'adhoc'
-
-    app.run(host='0.0.0.0', threaded=True, port=APP_PORT, debug=DEBUG_MODE, ssl_context=ssl_context)
+    app.run(host='0.0.0.0', threaded=True, port=APP_PORT, debug=DEBUG_MODE)
